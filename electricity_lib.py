@@ -1,5 +1,19 @@
 from enum import Enum
-import pandas as pd
+from datetime import datetime
+import requests
+
+
+def get_holiday_list(year):
+    url = f"https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/{year}.json"
+    response = requests.get(url)
+    response_json = response.json()
+    holiday_list = [item['date']
+                    for item in response_json if item['isHoliday']]
+    return holiday_list
+
+
+taiwan_holiday = get_holiday_list(datetime.now().year)
+taiwan_holiday.append(get_holiday_list(datetime.now().year - 1))
 
 
 class ContractType(str, Enum):
@@ -51,6 +65,20 @@ def get_release_hour_dict(contract_type, release_type):
             }
 
 
+def get_charege_hour_dict(contract_type):
+    if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
+        return {
+            SeasonType.SUMMER: ["00:00:00", "02:00:00"],
+            SeasonType.NONSUMMER: ["00:00:00",
+                                   "02:00:00", "11:00:00", "13:00:00"]
+        }
+    elif contract_type == ContractType.HIGH_PRESSURE_BATCH:
+        return {
+            SeasonType.SUMMER: ["21:30:00", "23:30:00"],
+            SeasonType.NONSUMMER: ["21:30:00", "23:30:00"]
+        }
+
+
 def is_summer(date_time):
     if (date_time.month > 5 or
         (date_time.month == 5 and date_time.day >= 16)) and (
@@ -97,7 +125,17 @@ def get_elec_type_dict(contract_type):
         }
 
 
+def is_workday(pd_timestamp):
+    date_obj = pd_timestamp.strftime("%Y%m%d")
+    # 判斷是否為工作日
+    return date_obj not in taiwan_holiday
+
+
 if __name__ == "__main__":
+    example_date = "2025-01-01 00:00:00"
+    print(f"{example_date} is workday = {is_workday(example_date)}")
+    example_date = "2025-04-22 00:00:00"
+    print(f"{example_date} is workday = {is_workday(example_date)}")
     contract_type = ContractType.HIGH_PRESSURE_THREE_PHASE
     season = SeasonType.NONSUMMER
     usage_hours = get_elec_type_dict(contract_type)[season]
