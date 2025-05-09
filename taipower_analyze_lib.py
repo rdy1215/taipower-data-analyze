@@ -1,11 +1,13 @@
 import importlib
 import pandas as pd
+from dataclasses import dataclass
 import electricity_lib as ec_lib
 
 importlib.reload(ec_lib)
 
 # 讀取 Excel 檔案
-FILE_PATH = "test_data.xlsx"
+METER_DATA_FILE_PATH = "test_data.xlsx"
+METER_CONTRACT_FILE_PATH = "test_info_data.xlsx"
 # 設定合約類型與釋放類型
 CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.MAX
@@ -14,18 +16,45 @@ BATTERY_KWH = 261 * 2 * 0.95
 BATTERY_KW = 125 * 2 * 0.95
 
 # columns define
-TIME_COL = "時間"
-USAGE_COL = "用電總量"
-BATTERY_KW_COL = "電池放電功率"
-BATTERY_KWH_COL = "電池容量"
-USAGE_WITH_BATTERY_COL = "增加電池後用電量"
+# 預設資訊欄位
 DEFAULT_DROP_COLS = ["儲冷尖峰", "儲冷半尖峰", "儲冷週六半尖峰", "儲冷離峰", "太陽光電"]
 SUM_COLS = ["尖峰", "半尖峰", "週六半尖峰", "離峰"]
-ELEC_BASIC_PRICE_COL = "原始基本電價"
-ELEC_CHARGE_PRICE_COL = "原始流動電價"
-ELEC_BASIC_PRICE_WITH_BATTERY_COL = "增加電池後基本電價"
-ELEC_CHARGE_PRICE_WITH_BATTERY_COL = "增加電池後流動電價"
-DEMAND_PRICE_COL = "需量價金"
+
+
+# 基本用電資訊欄位名稱
+@dataclass
+class MeterUsageColumns:
+    time_col: str = "時間"
+    usage_col: str = "用電總量"
+    battery_kw_col: str = "電池放電功率"
+    battery_kwh_col: str = "電池容量"
+    usage_with_battery_col: str = "增加電池後用電量"
+
+
+@dataclass
+class ElectricPriceColumns:
+    elec_basic_price_col: str = "原始基本電價"
+    elec_charge_price_col: str = "原始流動電價"
+    elec_basic_price_with_battery_col: str = "增加電池後基本電價"
+    elec_charge_price_with_battery_col: str = "增加電池後流動電價"
+    demand_price_col: str = "需量價金"
+
+
+@dataclass
+class ElectricContractColumns:
+    usually_contract_col: str = "UsuallyContract"
+    semi_peak_contract_col: str = "NoSummerOrHalfRushContract"
+    saturday_semi_peak_contract_col: str = "SaturdayHalfContract"
+    off_peak_contract_col: str = "NoRushContract"
+
+
+@dataclass
+class ElectricParameters:
+    elec_type_dict: dict
+    release_hour_dict: dict
+    charge_hour_dict: dict
+    contract_type: ec_lib.ContractType = CONTRACT_TYPE
+    release_type: ec_lib.ReleaseType = RELEASE_TYPE
 
 
 def in_peak_hour(date, elec_type_dict):
@@ -60,7 +89,7 @@ def in_peak_hour(date, elec_type_dict):
     return result
 
 
-def get_peak_hour_usage(data, time_col, usage_col, elec_type_dict):
+def get_peak_hour_usage(data, usage_cols: MeterUsageColumns, elec_type_dict):
     """
     顯示尖峰時段用電總量的函數
     :param data: 數據集
@@ -69,10 +98,10 @@ def get_peak_hour_usage(data, time_col, usage_col, elec_type_dict):
     """
     # 篩選需要的時間段和欄位
     filtered_data = data[
-        data[time_col].apply(lambda x: in_peak_hour(x, elec_type_dict))
+        data[usage_cols.time_col].apply(lambda x: in_peak_hour(x, elec_type_dict))
     ]
     # 按日期統計用電總量
-    return filtered_data.groupby(filtered_data[time_col].dt.date)[usage_col].sum()
+    return filtered_data.groupby(filtered_data[usage_cols.time_col].dt.date)[usage_cols.usage_col].sum()
 
 
 def cal_default_charge_kw(date, charge_hour_dict):
@@ -135,26 +164,25 @@ def cal_actual_release_power(usage, default_release_kw, last_remain_kw):
 
 def process_battery_usage(
     row,
-    time_col,
-    usage_col,
-    release_hour_dict,
-    charge_hour_dict,
-    release_type,
+    meter_usage_col: MeterUsageColumns,
+    elec_parameters: ElectricParameters,
     remain_battery_kw_list,
     battery_kwh_list,
 ):
-    date_time = row[time_col]
-    origin_usage = row[usage_col]
+    date_time = row[meter_usage_col.time_col]
+    origin_usage = row[meter_usage_col.usage_col]
     last_remain_kw = (
         remain_battery_kw_list[-1] if len(remain_battery_kw_list) > 0 else 0.0
     )
     last_battery_kwh = battery_kwh_list[-1] if len(battery_kwh_list) > 0 else 0.0
     battery_kw = 0.0
     if ec_lib.is_workday(date_time):
-        charge_kw = cal_default_charge_kw(date_time, charge_hour_dict)
+        charge_kw = cal_default_charge_kw(date_time, elec_parameters.charge_hour_dict)
         if charge_kw == 0.0:
             default_release_kw = cal_default_release_kw(
-                date_time, release_hour_dict, release_type
+                date_time,
+                elec_parameters.release_hour_dict,
+                elec_parameters.release_type,
             )
             if default_release_kw != 0.0:
                 battery_kw = cal_actual_release_power(
@@ -179,13 +207,10 @@ def process_battery_usage(
 
 
 def cal_elec_price(
-    row,
-    time_col,
-    usage_col,
-    usage_with_battery_col,
-    elec_price_col,
-    elec_price_with_battery_col,
-    dr_price_col,
+    raw_data,
+    contract_data,
+    meter_usage_cols: MeterUsageColumns,
+    elec_price_cols: ElectricPriceColumns,
 ):
     # 計算電價
     data[elec_price_col] = data[usage_col] * data[time_col].dt.hour.map(
