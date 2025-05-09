@@ -57,39 +57,52 @@ class ElectricParameters:
     release_type: ec_lib.ReleaseType = RELEASE_TYPE
 
 
-def in_peak_hour(date, elec_type_dict):
+def get_usage_type_from_dict(datetime, electric_type_dict: dict):
     """
-    判斷是否在尖峰時段的函數
-    :param date: 日期
-    :param time: 時間
-    :param elec_type_dict: 尖峰時段字典
-    :return: 是否在尖峰時段
+    判斷datetime處於哪種用電類型的函數
+    :param datetime: 日期時間
+    :param eletric_type_dict: 用電參數
+    :return: 用電類型
     """
+    result_type = None
+    is_summer = ec_lib.is_summer(datetime)
+    daily_type_dict = electric_type_dict.get(
+        ec_lib.SeasonType.SUMMER if is_summer else ec_lib.SeasonType.NONSUMMER
+    )
+    for type, time_list in daily_type_dict.items():
+        time_list = pd.to_datetime(time_list, format="%H:%M:%S").time
+        date_time = datetime.time()
+        for i in range(0, len(time_list), 2):
+            start_time = time_list[i]
+            end_time = time_list[i + 1]
+            if start_time <= date_time <= end_time:
+                result_type = type
+                break
+    return result_type
+
+
+def is_peak_hour(datetime, elec_params: ElectricParameters):
     result = False
-    peak_hour = []
-    if ec_lib.is_summer(date):
-        peak_hour = elec_type_dict.get(ec_lib.SeasonType.SUMMER).get(
-            ec_lib.UsageType.PEAK
-        )
-    else:
-        elec_hour_dict = elec_type_dict.get(ec_lib.SeasonType.NONSUMMER)
-        if ec_lib.UsageType.PEAK in elec_hour_dict:
-            peak_hour = elec_hour_dict.get(ec_lib.UsageType.PEAK)
-        else:
-            peak_hour = elec_hour_dict.get(ec_lib.UsageType.SEMI_PEAK)
-    peak_hour = pd.to_datetime(peak_hour, format="%H:%M:%S").time
-    date_time = date.time()
-    # 判斷時間是否在尖峰時段
-    for i in range(0, len(peak_hour), 2):
-        start_time = peak_hour[i]
-        end_time = peak_hour[i + 1]
-        if start_time <= date_time <= end_time:
+    usage_type = get_usage_type_from_dict(
+        datetime, elec_params.elec_type_dict
+    )
+    is_summer = ec_lib.is_summer(datetime)
+    if elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
+        if is_summer and usage_type == ec_lib.UsageType.PEAK:
             result = True
-            break
+        elif not is_summer and usage_type == ec_lib.UsageType.SEMI_PEAK:
+            result = True
+    elif elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
+        if is_summer and usage_type == ec_lib.UsageType.PEAK:
+            result = True
+        elif not is_summer and usage_type == ec_lib.UsageType.PEAK:
+            result = True
     return result
 
 
-def get_peak_hour_usage(data, usage_cols: MeterUsageColumns, elec_type_dict):
+def get_peak_hour_usage(
+    data, usage_cols: MeterUsageColumns, elec_params: ElectricParameters
+):
     """
     顯示尖峰時段用電總量的函數
     :param data: 數據集
@@ -98,10 +111,12 @@ def get_peak_hour_usage(data, usage_cols: MeterUsageColumns, elec_type_dict):
     """
     # 篩選需要的時間段和欄位
     filtered_data = data[
-        data[usage_cols.time_col].apply(lambda x: in_peak_hour(x, elec_type_dict))
+        data[usage_cols.time_col].apply(lambda x: is_peak_hour(x, elec_params))
     ]
     # 按日期統計用電總量
-    return filtered_data.groupby(filtered_data[usage_cols.time_col].dt.date)[usage_cols.usage_col].sum()
+    return filtered_data.groupby(filtered_data[usage_cols.time_col].dt.date)[
+        usage_cols.usage_col
+    ].sum()
 
 
 def cal_default_charge_kw(date, charge_hour_dict):

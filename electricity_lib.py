@@ -119,6 +119,67 @@ def get_elec_type_dict(contract_type):
         }
 
 
+def get_contract_price_dict(contract_type):
+    if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
+        return {
+            SeasonType.SUMMER: {
+                UsageType.PEAK: 217.3,
+                UsageType.SEMI_PEAK: 160.6,
+                UsageType.SATURDAY_SEMI_PEAK: 43.4,
+                UsageType.OFF_PEAK: 43.4,
+            },
+            SeasonType.NONSUMMER: {
+                UsageType.PEAK: 160.6,
+                UsageType.SEMI_PEAK: 160.6,
+                UsageType.SATURDAY_SEMI_PEAK: 32.1,
+                UsageType.OFF_PEAK: 32.1,
+            },
+        }
+    elif contract_type == ContractType.HIGH_PRESSURE_BATCH:
+        return {
+            SeasonType.SUMMER: {
+                UsageType.PEAK: 217.3,
+                UsageType.SATURDAY_SEMI_PEAK: 43.4,
+                UsageType.OFF_PEAK: 43.4,
+            },
+            SeasonType.NONSUMMER: {
+                UsageType.PEAK: 160.6,
+                UsageType.SATURDAY_SEMI_PEAK: 32.1,
+                UsageType.OFF_PEAK: 32.1,
+            },
+        }
+
+
+def get_charge_price_dict(contract_type):
+    if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
+        return {
+            SeasonType.SUMMER: {
+                UsageType.PEAK: 8.69,
+                UsageType.SEMI_PEAK: 5.38,
+                UsageType.SATURDAY_SEMI_PEAK: 2.5,
+                UsageType.OFF_PEAK: 2.4,
+            },
+            SeasonType.NONSUMMER: {
+                UsageType.SEMI_PEAK: 5.03,
+                UsageType.SATURDAY_SEMI_PEAK: 2.31,
+                UsageType.OFF_PEAK: 2.18,
+            },
+        }
+    elif contract_type == ContractType.HIGH_PRESSURE_BATCH:
+        return {
+            SeasonType.SUMMER: {
+                UsageType.PEAK: 11.44,
+                UsageType.SATURDAY_SEMI_PEAK: 3.2,
+                UsageType.OFF_PEAK: 2.99,
+            },
+            SeasonType.NONSUMMER: {
+                UsageType.PEAK: 10.8,
+                UsageType.SATURDAY_SEMI_PEAK: 2.89,
+                UsageType.OFF_PEAK: 2.67,
+            },
+        }
+
+
 def is_workday(pd_timestamp):
     date_obj = pd_timestamp.strftime("%Y%m%d")
     # 判斷是否為工作日
