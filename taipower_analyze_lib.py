@@ -21,6 +21,11 @@ BATTERY_KWH_COL = "電池容量"
 USAGE_WITH_BATTERY_COL = "增加電池後用電量"
 DEFAULT_DROP_COLS = ["儲冷尖峰", "儲冷半尖峰", "儲冷週六半尖峰", "儲冷離峰", "太陽光電"]
 SUM_COLS = ["尖峰", "半尖峰", "週六半尖峰", "離峰"]
+ELEC_BASIC_PRICE_COL = "原始基本電價"
+ELEC_CHARGE_PRICE_COL = "原始流動電價"
+ELEC_BASIC_PRICE_WITH_BATTERY_COL = "增加電池後基本電價"
+ELEC_CHARGE_PRICE_WITH_BATTERY_COL = "增加電池後流動電價"
+DEMAND_PRICE_COL = "需量價金"
 
 
 def in_peak_hour(date, elec_type_dict):
@@ -171,3 +176,21 @@ def process_battery_usage(
     battery_kwh = battery_kw / 4
     battery_kwh_list.append(last_battery_kwh - battery_kwh)
     return battery_kw, last_battery_kwh - battery_kwh, origin_usage - battery_kwh
+
+
+def cal_elec_price(
+    row,
+    time_col,
+    usage_col,
+    usage_with_battery_col,
+    elec_price_col,
+    elec_price_with_battery_col,
+    dr_price_col,
+):
+    # 計算電價
+    data[elec_price_col] = data[usage_col] * data[time_col].dt.hour.map(
+        ec_lib.ELEC_PRICE
+    )
+    data[elec_price_with_battery_col] = data[usage_with_battery_col] * data[
+        time_col
+    ].dt.hour.map(ec_lib.ELEC_PRICE)
