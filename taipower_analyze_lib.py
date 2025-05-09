@@ -14,6 +14,7 @@ RELEASE_TYPE = ec_lib.ReleaseType.MAX
 # 設定電池容量
 BATTERY_KWH = 261 * 2 * 0.95
 BATTERY_KW = 125 * 2 * 0.95
+DR_AVG_PRICE = 280
 
 # columns define
 # 預設資訊欄位
@@ -33,9 +34,7 @@ class MeterUsageColumns:
 
 @dataclass
 class ElectricPriceColumns:
-    elec_basic_price_col: str = "原始基本電價"
     elec_charge_price_col: str = "原始流動電價"
-    elec_basic_price_with_battery_col: str = "增加電池後基本電價"
     elec_charge_price_with_battery_col: str = "增加電池後流動電價"
     demand_price_col: str = "需量價金"
 
@@ -55,6 +54,12 @@ class ElectricParameters:
     charge_hour_dict: dict
     contract_type: ec_lib.ContractType = CONTRACT_TYPE
     release_type: ec_lib.ReleaseType = RELEASE_TYPE
+
+
+@dataclass
+class ElecetricPriceParameters:
+    charge_price_dict: dict
+    contract_price_dict: dict
 
 
 def get_usage_type_from_dict(datetime, electric_type_dict: dict):
@@ -83,9 +88,7 @@ def get_usage_type_from_dict(datetime, electric_type_dict: dict):
 
 def is_peak_hour(datetime, elec_params: ElectricParameters):
     result = False
-    usage_type = get_usage_type_from_dict(
-        datetime, elec_params.elec_type_dict
-    )
+    usage_type = get_usage_type_from_dict(datetime, elec_params.elec_type_dict)
     is_summer = ec_lib.is_summer(datetime)
     if elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
         if is_summer and usage_type == ec_lib.UsageType.PEAK:
@@ -191,7 +194,7 @@ def process_battery_usage(
     )
     last_battery_kwh = battery_kwh_list[-1] if len(battery_kwh_list) > 0 else 0.0
     battery_kw = 0.0
-    if ec_lib.is_workday(date_time):
+    if ec_lib.get_day_type(date_time) == ec_lib.DayType.WORKDAY:
         charge_kw = cal_default_charge_kw(date_time, elec_parameters.charge_hour_dict)
         if charge_kw == 0.0:
             default_release_kw = cal_default_release_kw(
@@ -222,15 +225,7 @@ def process_battery_usage(
 
 
 def cal_elec_price(
-    raw_data,
-    contract_data,
-    meter_usage_cols: MeterUsageColumns,
-    elec_price_cols: ElectricPriceColumns,
+    row, meter_usage_cols: MeterUsageColumns, charge_price_dict: dict
 ):
-    # 計算電價
-    data[elec_price_col] = data[usage_col] * data[time_col].dt.hour.map(
-        ec_lib.ELEC_PRICE
-    )
-    data[elec_price_with_battery_col] = data[usage_with_battery_col] * data[
-        time_col
-    ].dt.hour.map(ec_lib.ELEC_PRICE)
+    # TODO: according to time and usage calculate the price
+    return

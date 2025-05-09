@@ -37,6 +37,12 @@ class UsageType(str, Enum):
     OFF_PEAK = "離峰"
 
 
+class DayType(str, Enum):
+    WORKDAY = "工作日"
+    SATURDAY = "週六"
+    HOLIDAY = "週日與節假日"
+
+
 def get_release_hour_dict(contract_type, release_type):
     if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
         if release_type == ReleaseType.AVERAGE:
@@ -180,17 +186,22 @@ def get_charge_price_dict(contract_type):
         }
 
 
-def is_workday(pd_timestamp):
+def get_day_type(pd_timestamp):
     date_obj = pd_timestamp.strftime("%Y%m%d")
-    # 判斷是否為工作日
-    return date_obj not in taiwan_holiday
+    day_type = DayType.WORKDAY
+    if date_obj in taiwan_holiday:
+        if pd_timestamp.weekday() == 5:
+            day_type = DayType.SATURDAY
+        else:
+            day_type = DayType.HOLIDAY
+    return day_type
 
 
 if __name__ == "__main__":
     example_date = "2025-01-01 00:00:00"
-    print(f"{example_date} is workday = {is_workday(example_date)}")
+    print(f"{example_date} is workday = {get_day_type(example_date)}")
     example_date = "2025-04-22 00:00:00"
-    print(f"{example_date} is workday = {is_workday(example_date)}")
+    print(f"{example_date} is workday = {get_day_type(example_date)}")
     contract_type = ContractType.HIGH_PRESSURE_THREE_PHASE
     season = SeasonType.NONSUMMER
     usage_hours = get_elec_type_dict(contract_type)[season]
