@@ -1,6 +1,7 @@
 from enum import Enum
 from datetime import datetime
 import requests
+import pandas as pd
 
 
 def get_holiday_list(year):
@@ -195,6 +196,44 @@ def get_day_type(pd_timestamp):
         else:
             day_type = DayType.HOLIDAY
     return day_type
+
+
+def get_usage_type_from_dict(datetime, electric_type_dict: dict):
+    """
+    判斷datetime處於哪種用電類型的函數
+    :param datetime: 日期時間
+    :param eletric_type_dict: 用電參數
+    :return: 用電類型
+    """
+    result_type = UsageType.OFF_PEAK
+    daily_type_dict = electric_type_dict.get(
+        SeasonType.SUMMER if is_summer(datetime) else SeasonType.NONSUMMER
+    )
+    day_type = get_day_type(datetime)
+    if day_type == DayType.WORKDAY:
+        # verify peak, semi-peak and off peak
+        for type, time_list in daily_type_dict.items():
+            if type != UsageType.SATURDAY_SEMI_PEAK:
+                time_list = pd.to_datetime(time_list, format="%H:%M:%S").time
+                date_time = datetime.time()
+                for i in range(0, len(time_list), 2):
+                    start_time = time_list[i]
+                    end_time = time_list[i + 1]
+                    if start_time <= date_time <= end_time:
+                        result_type = type
+                        break    
+    elif day_type == DayType.SATURDAY:
+        # verify sat-semi-peak
+        time_list = daily_type_dict.get(UsageType.SATURDAY_SEMI_PEAK)
+        time_list = pd.to_datetime(time_list, format="%H:%M:%S").time
+        date_time = datetime.time()
+        for i in range(0, len(time_list), 2):
+            start_time = time_list[i]
+            end_time = time_list[i + 1]
+            if start_time <= date_time <= end_time:
+                result_type = UsageType.SATURDAY_SEMI_PEAK
+                break
+    return result_type
 
 
 if __name__ == "__main__":

@@ -62,33 +62,9 @@ class ElecetricPriceParameters:
     contract_price_dict: dict
 
 
-def get_usage_type_from_dict(datetime, electric_type_dict: dict):
-    """
-    判斷datetime處於哪種用電類型的函數
-    :param datetime: 日期時間
-    :param eletric_type_dict: 用電參數
-    :return: 用電類型
-    """
-    result_type = None
-    is_summer = ec_lib.is_summer(datetime)
-    daily_type_dict = electric_type_dict.get(
-        ec_lib.SeasonType.SUMMER if is_summer else ec_lib.SeasonType.NONSUMMER
-    )
-    for type, time_list in daily_type_dict.items():
-        time_list = pd.to_datetime(time_list, format="%H:%M:%S").time
-        date_time = datetime.time()
-        for i in range(0, len(time_list), 2):
-            start_time = time_list[i]
-            end_time = time_list[i + 1]
-            if start_time <= date_time <= end_time:
-                result_type = type
-                break
-    return result_type
-
-
 def is_peak_hour(datetime, elec_params: ElectricParameters):
     result = False
-    usage_type = get_usage_type_from_dict(datetime, elec_params.elec_type_dict)
+    usage_type = ec_lib.get_usage_type_from_dict(datetime, elec_params.elec_type_dict)
     is_summer = ec_lib.is_summer(datetime)
     if elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
         if is_summer and usage_type == ec_lib.UsageType.PEAK:
@@ -224,8 +200,47 @@ def process_battery_usage(
     return battery_kw, last_battery_kwh - battery_kwh, origin_usage - battery_kwh
 
 
+def cal_dr_volume(usage_kwh, battery_kw):
+    """
+    計算 DR 量
+    :param usage_kwh: 用電量
+    :param battery_kw: 電池功率
+    :return: DR 量
+    """
+    dr_volume = 0
+    if battery_kw < BATTERY_KW:
+        remain_kw = BATTERY_KW - battery_kw
+        if remain_kw > (usage_kwh * 4):
+            dr_volume = usage_kwh * 4
+        else:
+            dr_volume = remain_kw
+    return dr_volume / 1000
+
+
 def cal_elec_price(
-    row, meter_usage_cols: MeterUsageColumns, charge_price_dict: dict
+    row,
+    meter_usage_cols: MeterUsageColumns,
+    elec_type_dict: dict,
+    charge_price_dict: dict,
 ):
-    # TODO: according to time and usage calculate the price
-    return
+    datetime = row[meter_usage_cols.time_col]
+    elec_type = ec_lib.get_usage_type_from_dict(datetime, elec_type_dict)
+    price_dict = charge_price_dict.get(
+        ec_lib.SeasonType.SUMMER
+        if ec_lib.is_summer(datetime)
+        else ec_lib.SeasonType.NONSUMMER
+    )
+    elec_price = price_dict.get(elec_type)
+    dr_price = (
+        cal_dr_volume(
+            row[meter_usage_cols.usage_with_battery_col],
+            row[meter_usage_cols.battery_kw_col],
+        )
+        * DR_AVG_PRICE
+        / 4
+    )
+    return (
+        row[meter_usage_cols.usage_col] * elec_price,
+        row[meter_usage_cols.usage_with_battery_col] * elec_price,
+        dr_price,
+    )
