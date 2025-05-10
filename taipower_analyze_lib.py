@@ -1,6 +1,6 @@
 import importlib
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import electricity_lib as ec_lib
 
 importlib.reload(ec_lib)
@@ -15,6 +15,7 @@ RELEASE_TYPE = ec_lib.ReleaseType.MAX
 BATTERY_KWH = 261 * 2 * 0.95
 BATTERY_KW = 125 * 2 * 0.95
 DR_AVG_PRICE = 280
+NEW_CONTRACT_BUFFER = 1.2
 
 # columns define
 # 預設資訊欄位
@@ -40,14 +41,6 @@ class ElectricPriceColumns:
 
 
 @dataclass
-class ElectricContractColumns:
-    usually_contract_col: str = "UsuallyContract"
-    semi_peak_contract_col: str = "NoSummerOrHalfRushContract"
-    saturday_semi_peak_contract_col: str = "SaturdayHalfContract"
-    off_peak_contract_col: str = "NoRushContract"
-
-
-@dataclass
 class ElectricParameters:
     elec_type_dict: dict
     release_hour_dict: dict
@@ -62,7 +55,16 @@ class ElecetricPriceParameters:
     contract_price_dict: dict
 
 
-def is_peak_hour(datetime, elec_params: ElectricParameters):
+def get_contract_rename_dict():
+    return {
+        "UsuallyContract": ec_lib.UsageType.PEAK,
+        "NoSummerOrHalfRushContract": ec_lib.UsageType.SEMI_PEAK,
+        "SaturdayHalfContract": ec_lib.UsageType.SATURDAY_SEMI_PEAK,
+        "NoRushContract": ec_lib.UsageType.OFF_PEAK,
+    }
+
+
+def is_expensive_hour(datetime, elec_params: ElectricParameters):
     result = False
     usage_type = ec_lib.get_usage_type_from_dict(datetime, elec_params.elec_type_dict)
     is_summer = ec_lib.is_summer(datetime)
@@ -79,7 +81,7 @@ def is_peak_hour(datetime, elec_params: ElectricParameters):
     return result
 
 
-def get_peak_hour_usage(
+def get_expensive_hour_usage(
     data, usage_cols: MeterUsageColumns, elec_params: ElectricParameters
 ):
     """
@@ -90,7 +92,7 @@ def get_peak_hour_usage(
     """
     # 篩選需要的時間段和欄位
     filtered_data = data[
-        data[usage_cols.time_col].apply(lambda x: is_peak_hour(x, elec_params))
+        data[usage_cols.time_col].apply(lambda x: is_expensive_hour(x, elec_params))
     ]
     # 按日期統計用電總量
     return filtered_data.groupby(filtered_data[usage_cols.time_col].dt.date)[
@@ -244,3 +246,105 @@ def cal_elec_price(
         row[meter_usage_cols.usage_with_battery_col] * elec_price,
         dr_price,
     )
+
+
+def cal_new_contract_volume(
+    raw_data, meter_usage_cols: MeterUsageColumns, elec_type_dict: dict
+):
+    """
+    計算新合約的用電量
+    :param raw_data: 原始數據
+    :param meter_usage_cols: 用電欄位名稱
+    :return: 新合約的用電量
+    """
+    (
+        max_usually_contract_volume,
+        max_semi_peak_contract_volume,
+        max_saturday_semi_peak_contract_volume,
+        max_off_peak_contract_volume,
+    ) = (0.0, 0.0, 0.0, 0.0)
+    for index, row in raw_data.iterrows():
+        date_time = row[meter_usage_cols.time_col]
+        usage_type = ec_lib.get_usage_type_from_dict(date_time, elec_type_dict)
+        if (usage_type == ec_lib.UsageType.PEAK) and row[
+            meter_usage_cols.usage_col
+        ] > max_usually_contract_volume:
+            max_usually_contract_volume = row[meter_usage_cols.usage_col]
+        elif (usage_type == ec_lib.UsageType.SEMI_PEAK) and row[
+            meter_usage_cols.usage_col
+        ] > max_semi_peak_contract_volume:
+            max_semi_peak_contract_volume = row[meter_usage_cols.usage_col]
+        elif (usage_type == ec_lib.UsageType.SATURDAY_SEMI_PEAK) and row[
+            meter_usage_cols.usage_col
+        ] > max_saturday_semi_peak_contract_volume:
+            max_saturday_semi_peak_contract_volume = row[meter_usage_cols.usage_col]
+        elif (usage_type == ec_lib.UsageType.OFF_PEAK) and row[
+            meter_usage_cols.usage_col
+        ] > max_off_peak_contract_volume:
+            max_off_peak_contract_volume = row[meter_usage_cols.usage_col]
+    max_semi_peak_contract_volume -= max_usually_contract_volume
+    max_saturday_semi_peak_contract_volume = (
+        max_saturday_semi_peak_contract_volume
+        - max_usually_contract_volume
+        - max_semi_peak_contract_volume
+    )
+    max_off_peak_contract_volume = (
+        max_off_peak_contract_volume
+        - max_usually_contract_volume
+        - max_semi_peak_contract_volume
+        - max_saturday_semi_peak_contract_volume
+    )
+    return pd.DataFrame(
+        {
+            ec_lib.UsageType.PEAK: max_usually_contract_volume
+            * NEW_CONTRACT_BUFFER,
+            ec_lib.UsageType.SEMI_PEAK: (
+                max_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
+                if max_semi_peak_contract_volume > 0
+                else 0.0
+            ),
+            ec_lib.UsageType.SATURDAY_SEMI_PEAK: (
+                max_saturday_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
+                if max_saturday_semi_peak_contract_volume > 0
+                else 0.0
+            ),
+            ec_lib.UsageType.OFF_PEAK: (
+                max_off_peak_contract_volume * NEW_CONTRACT_BUFFER
+                if max_off_peak_contract_volume > 0
+                else 0.0
+            ),
+        }
+    )
+
+
+def cal_basic_price(contract_volume, price_dict, elec_contract_cols: ec_lib.UsageType):
+    total_price = 0
+    for i in elec_contract_cols:
+        total_price += contract_volume.get(i) * price_dict.get(i)
+    return total_price
+
+
+def cal_monthly_basic_price(
+    contract_volume,
+    contract_price_dict: dict,
+    elec_contract_cols: ec_lib.UsageType,
+):
+    summer_price = cal_basic_price(
+        contract_volume,
+        contract_price_dict.get(ec_lib.SeasonType.SUMMER),
+        elec_contract_cols,
+    )
+    non_summer_price = cal_basic_price(
+        contract_volume,
+        contract_price_dict.get(ec_lib.SeasonType.NONSUMMER),
+        elec_contract_cols,
+    )
+    month_price_dict = {}
+    for i in range(1, 13):
+        if i in [5, 10]:
+            month_price_dict.update({i: (summer_price + non_summer_price) / 2})
+        elif i in [6, 7, 8, 9]:
+            month_price_dict.update({i: summer_price})
+        else:
+            month_price_dict.update({i: non_summer_price})
+    return month_price_dict
