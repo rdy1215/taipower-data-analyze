@@ -106,8 +106,43 @@ def group_data_in_freq(
     )
 
 
-def filter_daily_expensive_hour_usage(
+def group_max_data_in_freq(
     data,
+    freq,
+    usage_cols: MeterUsageColumns,
+    elec_price_cols: ElectricPriceColumns,
+):
+    # 按日期統計用電總量
+    return (
+        data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq))
+        .agg(
+            {
+                usage_cols.usage_col: "max",
+                usage_cols.battery_kw_col: "mean",
+                usage_cols.battery_kwh_col: "max",
+                usage_cols.usage_with_battery_col: "max",
+                elec_price_cols.elec_charge_price_col: "max",
+                elec_price_cols.elec_charge_price_with_battery_col: "max",
+                elec_price_cols.demand_price_col: "max",
+            }
+        )
+        .reset_index()
+    )
+
+
+def filter_expensive_usage(
+    data,
+    usage_cols: MeterUsageColumns,
+    elec_params: ElectricParameters,
+):
+    return data[
+        data[usage_cols.time_col].apply(lambda x: is_expensive_hour(x, elec_params))
+    ]
+
+
+def filter_expensive_usage_in_freq(
+    data,
+    freq,
     usage_cols: MeterUsageColumns,
     elec_price_cols: ElectricPriceColumns,
     elec_params: ElectricParameters,
@@ -119,10 +154,8 @@ def filter_daily_expensive_hour_usage(
     :param usage_col: 用電總量欄位名稱
     """
     # 篩選需要的時間段和欄位
-    expensive_hour_data = data[
-        data[usage_cols.time_col].apply(lambda x: is_expensive_hour(x, elec_params))
-    ]
-    return group_data_in_freq(expensive_hour_data, "D", usage_cols, elec_price_cols)
+    expensive_hour_data = filter_expensive_usage(data, usage_cols, elec_params)
+    return group_data_in_freq(expensive_hour_data, freq, usage_cols, elec_price_cols)
 
 
 def cal_default_charge_kw(date, charge_hour_dict):
