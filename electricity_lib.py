@@ -26,6 +26,11 @@ class ReleaseType(str, Enum):
     MAX = "最大"
 
 
+class ChargeType(str, Enum):
+    AVERAGE = "平均"
+    MAX = "最大"
+
+
 class SeasonType(str, Enum):
     SUMMER = "夏季"
     NONSUMMER = "非夏季"
@@ -44,7 +49,7 @@ class DayType(str, Enum):
     HOLIDAY = "週日與節假日"
 
 
-def get_release_hour_dict(contract_type, release_type):
+def get_release_hour_dict(contract_type: ContractType, release_type: ReleaseType):
     if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
         if release_type == ReleaseType.AVERAGE:
             return {
@@ -69,17 +74,29 @@ def get_release_hour_dict(contract_type, release_type):
             }
 
 
-def get_charege_hour_dict(contract_type):
+def get_charege_hour_dict(contract_type: ContractType, charge_type: ChargeType):
     if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
-        return {
-            SeasonType.SUMMER: ["00:00:00", "02:00:00"],
-            SeasonType.NONSUMMER: ["00:00:00", "02:00:00", "11:00:00", "13:00:00"],
-        }
+        if charge_type == ChargeType.AVERAGE:
+            return {
+                SeasonType.SUMMER: ["00:00:00", "09:00:00"],
+                SeasonType.NONSUMMER: ["00:00:00", "06:00:00", "11:00:00", "14:00:00"],
+            }
+        elif charge_type == ChargeType.MAX:
+            return {
+                SeasonType.SUMMER: ["00:00:00", "02:00:00"],
+                SeasonType.NONSUMMER: ["00:00:00", "02:00:00", "11:00:00", "13:00:00"],
+            }
     elif contract_type == ContractType.HIGH_PRESSURE_BATCH:
-        return {
-            SeasonType.SUMMER: ["21:30:00", "23:30:00"],
-            SeasonType.NONSUMMER: ["21:30:00", "23:30:00"],
-        }
+        if charge_type == ChargeType.AVERAGE:
+            return {
+                SeasonType.SUMMER: ["00:00:00", "15:30:00", "21:30:00", "23:59:59"],
+                SeasonType.NONSUMMER: ["00:00:00", "15:30:00", "21:30:00", "23:59:59"],
+            }
+        elif charge_type == ChargeType.MAX:
+            return {
+                SeasonType.SUMMER: ["21:30:00", "23:30:00"],
+                SeasonType.NONSUMMER: ["21:30:00", "23:30:00"],
+            }
 
 
 def is_summer(date_time):
@@ -221,7 +238,7 @@ def get_usage_type_from_dict(datetime, electric_type_dict: dict):
                     end_time = time_list[i + 1]
                     if start_time <= date_time <= end_time:
                         result_type = type
-                        break    
+                        break
     elif day_type == DayType.SATURDAY:
         # verify sat-semi-peak
         time_list = daily_type_dict.get(UsageType.SATURDAY_SEMI_PEAK)
