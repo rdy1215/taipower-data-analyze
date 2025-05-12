@@ -1,5 +1,6 @@
 import importlib
 import pandas as pd
+import calendar
 from dataclasses import dataclass
 import electricity_lib as ec_lib
 
@@ -17,6 +18,9 @@ BATTERY_KW = 125 * 2 * 0.95
 DR_AVG_PRICE = 280
 NEW_CONTRACT_BUFFER = 1.2
 CHARGE_LOSS = 0.85
+
+
+MONTH_LIST = [calendar.month_name[i] for i in range(1, 13)]
 
 # columns define
 # 預設資訊欄位
@@ -338,22 +342,23 @@ def cal_new_contract_volume(
     for index, row in raw_data.iterrows():
         date_time = row[meter_usage_cols.time_col]
         usage_type = ec_lib.get_usage_type_from_dict(date_time, elec_type_dict)
-        if (usage_type == ec_lib.UsageType.PEAK) and row[
-            meter_usage_cols.usage_col
-        ] > max_usually_contract_volume:
-            max_usually_contract_volume = row[meter_usage_cols.usage_col]
-        elif (usage_type == ec_lib.UsageType.SEMI_PEAK) and row[
-            meter_usage_cols.usage_col
-        ] > max_semi_peak_contract_volume:
-            max_semi_peak_contract_volume = row[meter_usage_cols.usage_col]
-        elif (usage_type == ec_lib.UsageType.SATURDAY_SEMI_PEAK) and row[
-            meter_usage_cols.usage_col
-        ] > max_saturday_semi_peak_contract_volume:
-            max_saturday_semi_peak_contract_volume = row[meter_usage_cols.usage_col]
-        elif (usage_type == ec_lib.UsageType.OFF_PEAK) and row[
-            meter_usage_cols.usage_col
-        ] > max_off_peak_contract_volume:
-            max_off_peak_contract_volume = row[meter_usage_cols.usage_col]
+        usage_kw = row[meter_usage_cols.usage_with_battery_col] * 4
+        if (
+            usage_type == ec_lib.UsageType.PEAK
+        ) and usage_kw > max_usually_contract_volume:
+            max_usually_contract_volume = usage_kw
+        elif (
+            usage_type == ec_lib.UsageType.SEMI_PEAK
+        ) and usage_kw > max_semi_peak_contract_volume:
+            max_semi_peak_contract_volume = usage_kw
+        elif (
+            usage_type == ec_lib.UsageType.SATURDAY_SEMI_PEAK
+        ) and usage_kw > max_saturday_semi_peak_contract_volume:
+            max_saturday_semi_peak_contract_volume = usage_kw
+        elif (
+            usage_type == ec_lib.UsageType.OFF_PEAK
+        ) and usage_kw > max_off_peak_contract_volume:
+            max_off_peak_contract_volume = usage_kw
     max_semi_peak_contract_volume -= max_usually_contract_volume
     max_saturday_semi_peak_contract_volume = (
         max_saturday_semi_peak_contract_volume
@@ -413,9 +418,11 @@ def cal_monthly_basic_price(
     month_price_dict = {}
     for i in range(1, 13):
         if i in [5, 10]:
-            month_price_dict.update({i: (summer_price + non_summer_price) / 2})
+            month_price_dict.update(
+                {MONTH_LIST[i - 1]: (summer_price + non_summer_price) / 2}
+            )
         elif i in [6, 7, 8, 9]:
-            month_price_dict.update({i: summer_price})
+            month_price_dict.update({MONTH_LIST[i - 1]: summer_price})
         else:
-            month_price_dict.update({i: non_summer_price})
+            month_price_dict.update({MONTH_LIST[i - 1]: non_summer_price})
     return month_price_dict
