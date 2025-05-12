@@ -1,6 +1,6 @@
 import importlib
 import pandas as pd
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import electricity_lib as ec_lib
 
 importlib.reload(ec_lib)
@@ -30,6 +30,8 @@ class MeterUsageColumns:
     time_col: str = "時間"
     usage_col: str = "用電總量"
     battery_kw_col: str = "電池放電功率"
+    charge_kwh_col: str = "電池充電量"
+    release_kwh_col: str = "電池放電量"
     battery_kwh_col: str = "電池容量"
     usage_with_battery_col: str = "增加電池後用電量"
 
@@ -97,6 +99,8 @@ def group_data_in_freq(
                 usage_cols.battery_kw_col: "mean",
                 usage_cols.battery_kwh_col: "sum",
                 usage_cols.usage_with_battery_col: "sum",
+                usage_cols.charge_kwh_col: "sum",
+                usage_cols.release_kwh_col: "sum",
                 elec_price_cols.elec_charge_price_col: "sum",
                 elec_price_cols.elec_charge_price_with_battery_col: "sum",
                 elec_price_cols.demand_price_col: "sum",
@@ -121,6 +125,8 @@ def group_max_data_in_freq(
                 usage_cols.battery_kw_col: "mean",
                 usage_cols.battery_kwh_col: "max",
                 usage_cols.usage_with_battery_col: "max",
+                usage_cols.charge_kwh_col: "max",
+                usage_cols.release_kwh_col: "max",
                 elec_price_cols.elec_charge_price_col: "max",
                 elec_price_cols.elec_charge_price_with_battery_col: "max",
                 elec_price_cols.demand_price_col: "max",
@@ -229,7 +235,7 @@ def process_battery_usage(
         remain_battery_kw_list[-1] if len(remain_battery_kw_list) > 0 else 0.0
     )
     last_battery_kwh = battery_kwh_list[-1] if len(battery_kwh_list) > 0 else 0.0
-    battery_kw = 0.0
+    battery_kw, charge_kw = 0.0, 0.0
     if ec_lib.get_day_type(date_time) == ec_lib.DayType.WORKDAY:
         charge_kw = cal_default_charge_kw(date_time, elec_parameters.charge_hour_dict)
         if charge_kw == 0.0:
@@ -242,6 +248,7 @@ def process_battery_usage(
                 battery_kw = cal_actual_release_power(
                     origin_usage, default_release_kw, last_remain_kw
                 )
+                release_kw = battery_kw
                 if battery_kw < (default_release_kw + last_remain_kw):
                     remain_battery_kw_list.append(
                         (default_release_kw + last_remain_kw) - battery_kw
@@ -258,7 +265,13 @@ def process_battery_usage(
     battery_kwh = battery_kw / 4
     usage_kwh = battery_kwh if battery_kwh > 0 else battery_kwh / CHARGE_LOSS
     battery_kwh_list.append(last_battery_kwh - battery_kwh)
-    return battery_kw, last_battery_kwh - battery_kwh, origin_usage - usage_kwh
+    return (
+        battery_kw,
+        last_battery_kwh - battery_kwh,
+        origin_usage - usage_kwh,
+        usage_kwh if usage_kwh < 0 else 0.0,
+        usage_kwh if usage_kwh > 0 else 0.0,
+    )
 
 
 def cal_dr_volume(usage_kwh, battery_kw):
