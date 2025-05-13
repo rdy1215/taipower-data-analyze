@@ -12,9 +12,12 @@ METER_CONTRACT_FILE_PATH = "test_info_data.xlsx"
 CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
+
 # 設定電池容量
 BATTERY_KWH = 261 * 2 * 0.95
 BATTERY_KW = 125 * 2 * 0.95
+
+KWH_PRICE = 9000
 DR_AVG_PRICE = 280
 NEW_CONTRACT_BUFFER = 1.1
 CHARGE_LOSS = 0.85
@@ -59,7 +62,6 @@ class ElectricPriceColumns:
     elec_charge_price_with_battery_col: str = "增加電池後流動電價"
     demand_price_col: str = "需量價金"
 
-
 @dataclass
 class ElectricParameters:
     elec_type_dict: dict
@@ -74,6 +76,10 @@ class ElectricParameters:
 class ElecetricPriceParameters:
     charge_price_dict: dict
     contract_price_dict: dict
+
+@dataclass
+class YearlyProfitColumns:
+    
 
 
 def contract_df_to_dict(df):
