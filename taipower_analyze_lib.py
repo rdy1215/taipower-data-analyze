@@ -13,12 +13,18 @@ CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
 
+BATTERY_BUFFER = 0.95
+BATTERY_DECAY = 0.98
+
 # 設定電池容量
-BATTERY_KWH = 261 * 2 * 0.95
-BATTERY_KW = 125 * 2 * 0.95
+BATTERY_KWH = 261 * 2 * BATTERY_BUFFER
+BATTERY_KW = 125 * 2 * BATTERY_BUFFER
+
 
 KWH_PRICE = 9000
 DR_AVG_PRICE = 280
+DR_REACTION_FREQ = 1 / 30
+DR_ENERGY_PRICE = 4
 NEW_CONTRACT_BUFFER = 1.1
 CHARGE_LOSS = 0.85
 
@@ -62,6 +68,7 @@ class ElectricPriceColumns:
     elec_charge_price_with_battery_col: str = "增加電池後流動電價"
     demand_price_col: str = "需量價金"
 
+
 @dataclass
 class ElectricParameters:
     elec_type_dict: dict
@@ -77,9 +84,14 @@ class ElecetricPriceParameters:
     charge_price_dict: dict
     contract_price_dict: dict
 
+
 @dataclass
 class YearlyProfitColumns:
-    
+    charge_profit_col: str = "尖離峰套利利潤"
+    contract_profit_col: str = "基本電價差利潤"
+    dr_profit_col: str = "需量反應價金"
+    total_profit_col: str = "年度效益"
+    cumulative_profit_col: str = "累計效益"
 
 
 def contract_df_to_dict(df):
@@ -335,14 +347,13 @@ def cal_elec_price(
         else ec_lib.SeasonType.NONSUMMER
     )
     elec_price = price_dict.get(elec_type)
-    dr_price = (
-        cal_dr_volume(
-            row[meter_usage_cols.usage_with_battery_col],
-            row[meter_usage_cols.battery_kw_col],
-        )
-        * DR_AVG_PRICE
-        / 4
+    dr_mwh = cal_dr_volume(
+        row[meter_usage_cols.usage_with_battery_col],
+        row[meter_usage_cols.battery_kw_col],
     )
+    dr_price = (
+        dr_mwh * DR_AVG_PRICE + dr_mwh * 1000 * DR_REACTION_FREQ * DR_ENERGY_PRICE
+    ) / 4
     return (
         row[meter_usage_cols.usage_col] * elec_price,
         row[meter_usage_cols.usage_with_battery_col] * elec_price,
@@ -440,3 +451,56 @@ def cal_monthly_basic_price(
         else:
             month_price_dict.update({MONTH_LIST[i - 1]: non_summer_price})
     return month_price_dict
+
+
+def cal_year_profit(
+    monthly_data,
+    contract_monthly_basic_price: dict,
+    new_monthly_basic_price: dict,
+    elec_price_cols: ElectricPriceColumns,
+    yearly_profit_cols: YearlyProfitColumns,
+):
+    """
+    計算年度效益
+    :param monthly_data: 月度數據
+    :param contract_monthly_basic_price: 原始合約電價
+    :param new_monthly_basic_price: 新合約電價
+    :param elec_price_cols: 電價效益欄位名稱
+    :return: 年度效益
+    """
+    building_cost = -(BATTERY_KWH / BATTERY_BUFFER * KWH_PRICE)
+    result = pd.DataFrame(columns=yearly_profit_cols.__dict__.values())
+    result.loc[0] = [
+        0,
+        0,
+        0,
+        0,
+        building_cost,
+    ]
+    charge_profit = (
+        monthly_data[elec_price_cols.elec_charge_price_col]
+        - monthly_data[elec_price_cols.elec_charge_price_with_battery_col]
+    ).sum()
+    contract_profit = sum(
+        contract_monthly_basic_price[key] - new_monthly_basic_price[key]
+        for key in contract_monthly_basic_price
+    )
+    dr_profit = monthly_data[elec_price_cols.demand_price_col].sum()
+    for i in range(1, 21):
+        total_profit = charge_profit + contract_profit + dr_profit
+        result.loc[i] = [
+            charge_profit,
+            contract_profit,
+            dr_profit,
+            total_profit,
+            result.loc[i - 1][yearly_profit_cols.cumulative_profit_col] + total_profit,
+        ]
+        charge_profit *= BATTERY_DECAY
+        contract_profit *= BATTERY_DECAY
+        dr_profit *= BATTERY_DECAY
+
+    result[yearly_profit_cols.cumulative_profit_col] = result[
+        yearly_profit_cols.cumulative_profit_col
+    ].apply(lambda x: "{:.0f}".format(x))
+
+    return result
