@@ -6,8 +6,9 @@ import electricity_lib as ec_lib
 importlib.reload(ec_lib)
 
 # 讀取 Excel 檔案
-METER_DATA_FILE_PATH = "test_data.xlsx"
-METER_CONTRACT_FILE_PATH = "test_info_data.xlsx"
+METER_NO = "02293584018"
+METER_DATA_FILE_PATH = f"meter_{METER_NO}_data.xlsx"
+METER_CONTRACT_FILE_PATH = f"info_{METER_NO}_data.xlsx"
 # 設定合約類型與釋放類型
 CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
