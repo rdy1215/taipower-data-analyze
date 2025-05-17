@@ -62,6 +62,8 @@ class MeterUsageColumns:
     release_kwh_col: str = "電池放電量"
     battery_kwh_col: str = "電池容量"
     usage_with_battery_col: str = "增加電池後用電量"
+    dr_volume_col: str = "需量反應投標量"
+    
 
 
 @dataclass
@@ -241,26 +243,37 @@ def cal_default_release_kw(date, release_hour_dict, release_type):
             if release_type == ec_lib.ReleaseType.MAX:
                 release_power = BATTERY_KW
             elif release_type == ec_lib.ReleaseType.AVERAGE:
-                release_power = BATTERY_KWH / (
+                average_power = BATTERY_KWH / (
                     ((end_time - start_time).seconds + 1) / 3600.0
+                )
+                release_power = (
+                    average_power if average_power <= BATTERY_KW else BATTERY_KW
                 )
             break
     return release_power
 
 
-def cal_actual_release_power(usage, default_release_kw, last_remain_kw):
+def cal_actual_release_power(
+    usage, default_release_kw, last_remain_kw, last_battery_kwh
+):
     release_kw = 0.0
     usage_kw = usage * 4
     if usage_kw > default_release_kw:
         sum_kw = default_release_kw + last_remain_kw
-        if usage_kw > sum_kw and sum_kw <= BATTERY_KW:
-            release_kw = sum_kw
-        elif usage_kw > sum_kw and sum_kw > BATTERY_KW:
-            release_kw = BATTERY_KW
+        if sum_kw <= BATTERY_KW:
+            if usage_kw > sum_kw:
+                release_kw = sum_kw
+            else:
+                release_kw = usage_kw
         else:
-            release_kw = usage_kw
+            if usage_kw > BATTERY_KW:
+                release_kw = BATTERY_KW
+            else:
+                release_kw = usage_kw
     else:
         release_kw = usage_kw
+    if release_kw / 4 > last_battery_kwh:
+        release_kw = last_battery_kwh * 4
     return release_kw
 
 
@@ -288,9 +301,9 @@ def process_battery_usage(
                 elec_parameters.release_hour_dict,
                 elec_parameters.release_type,
             )
-            if default_release_kw != 0.0:
+            if default_release_kw != 0.0 and last_battery_kwh > 0.0:
                 battery_kw = cal_actual_release_power(
-                    origin_usage, default_release_kw, last_remain_kw
+                    origin_usage, default_release_kw, last_remain_kw, last_battery_kwh
                 )
                 if battery_kw < (default_release_kw + last_remain_kw):
                     remain_battery_kw_list.append(
@@ -317,7 +330,7 @@ def process_battery_usage(
     )
 
 
-def cal_dr_volume(usage_kwh, battery_kw):
+def cal_dr_volume(usage_kwh, battery_kw, battery_kwh):
     """
     計算 DR 量
     :param usage_kwh: 用電量
@@ -331,6 +344,8 @@ def cal_dr_volume(usage_kwh, battery_kw):
             dr_volume = usage_kwh * 4
         else:
             dr_volume = remain_kw
+    if dr_volume >  (battery_kwh * 4):
+        dr_volume = battery_kwh * 4
     return dr_volume / 1000
 
 
@@ -351,6 +366,7 @@ def cal_elec_price(
     dr_mwh = cal_dr_volume(
         row[meter_usage_cols.usage_with_battery_col],
         row[meter_usage_cols.battery_kw_col],
+        row[meter_usage_cols.battery_kwh_col],
     )
     dr_price = (
         dr_mwh * DR_AVG_PRICE + dr_mwh * 1000 * DR_REACTION_FREQ * DR_ENERGY_PRICE
@@ -358,6 +374,7 @@ def cal_elec_price(
     return (
         row[meter_usage_cols.usage_col] * elec_price,
         row[meter_usage_cols.usage_with_battery_col] * elec_price,
+        dr_mwh,
         dr_price,
     )
 
