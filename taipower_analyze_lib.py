@@ -119,9 +119,7 @@ def is_expensive_hour(datetime, elec_params: ElectricParameters):
         elif not is_summer and usage_type == ec_lib.UsageType.SEMI_PEAK:
             result = True
     elif elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
-        if is_summer and usage_type == ec_lib.UsageType.PEAK:
-            result = True
-        elif not is_summer and usage_type == ec_lib.UsageType.PEAK:
+        if usage_type == ec_lib.UsageType.PEAK:
             result = True
     return result
 
@@ -254,16 +252,13 @@ def cal_actual_release_power(usage, default_release_kw, last_remain_kw):
     release_kw = 0.0
     usage_kw = usage * 4
     if usage_kw > default_release_kw:
-        if last_remain_kw > 0.0:
-            sum_kw = default_release_kw + last_remain_kw
-            if usage_kw > sum_kw and sum_kw <= BATTERY_KW:
-                release_kw = sum_kw
-            elif usage_kw > sum_kw and sum_kw > BATTERY_KW:
-                release_kw = BATTERY_KW
-            else:
-                release_kw = usage_kw
+        sum_kw = default_release_kw + last_remain_kw
+        if usage_kw > sum_kw and sum_kw <= BATTERY_KW:
+            release_kw = sum_kw
+        elif usage_kw > sum_kw and sum_kw > BATTERY_KW:
+            release_kw = BATTERY_KW
         else:
-            release_kw = default_release_kw
+            release_kw = usage_kw
     else:
         release_kw = usage_kw
     return release_kw
