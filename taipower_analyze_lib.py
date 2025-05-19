@@ -63,7 +63,6 @@ class MeterUsageColumns:
     battery_kwh_col: str = "電池容量"
     usage_with_battery_col: str = "增加電池後用電量"
     dr_volume_col: str = "需量反應投標量"
-    
 
 
 @dataclass
@@ -126,7 +125,7 @@ def is_expensive_hour(datetime, elec_params: ElectricParameters):
     return result
 
 
-def group_data_in_freq(
+def group_all_data_withour_dr_in_freq(
     data,
     freq,
     usage_cols: MeterUsageColumns,
@@ -139,10 +138,36 @@ def group_data_in_freq(
             {
                 usage_cols.usage_col: "sum",
                 usage_cols.battery_kw_col: "mean",
-                usage_cols.battery_kwh_col: "sum",
+                usage_cols.battery_kwh_col: "mean",
                 usage_cols.usage_with_battery_col: "sum",
                 usage_cols.charge_kwh_col: "sum",
                 usage_cols.release_kwh_col: "sum",
+                elec_price_cols.elec_charge_price_col: "sum",
+                elec_price_cols.elec_charge_price_with_battery_col: "sum",
+            }
+        )
+        .reset_index()
+    )
+
+
+def group_all_data_in_freq(
+    data,
+    freq,
+    usage_cols: MeterUsageColumns,
+    elec_price_cols: ElectricPriceColumns,
+):
+    # 按日期統計用電總量
+    return (
+        data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq))
+        .agg(
+            {
+                usage_cols.usage_col: "sum",
+                usage_cols.battery_kw_col: "mean",
+                usage_cols.battery_kwh_col: "mean",
+                usage_cols.usage_with_battery_col: "sum",
+                usage_cols.charge_kwh_col: "sum",
+                usage_cols.release_kwh_col: "sum",
+                usage_cols.dr_volume_col: "sum",
                 elec_price_cols.elec_charge_price_col: "sum",
                 elec_price_cols.elec_charge_price_with_battery_col: "sum",
                 elec_price_cols.demand_price_col: "sum",
@@ -169,6 +194,7 @@ def group_max_data_in_freq(
                 usage_cols.usage_with_battery_col: "max",
                 usage_cols.charge_kwh_col: "max",
                 usage_cols.release_kwh_col: "max",
+                usage_cols.usage_cols: "max",
                 elec_price_cols.elec_charge_price_col: "max",
                 elec_price_cols.elec_charge_price_with_battery_col: "max",
                 elec_price_cols.demand_price_col: "max",
@@ -203,7 +229,9 @@ def filter_expensive_usage_in_freq(
     """
     # 篩選需要的時間段和欄位
     expensive_hour_data = filter_expensive_usage(data, usage_cols, elec_params)
-    return group_data_in_freq(expensive_hour_data, freq, usage_cols, elec_price_cols)
+    return group_all_data_in_freq(
+        expensive_hour_data, freq, usage_cols, elec_price_cols
+    )
 
 
 def cal_default_charge_kw(date, charge_hour_dict, charge_type: ec_lib.ChargeType):
@@ -330,23 +358,58 @@ def process_battery_usage(
     )
 
 
-def cal_dr_volume(usage_kwh, battery_kw, battery_kwh):
+def cal_dr_volume_and_price(usage_kwh, battery_kw, battery_kwh):
     """
-    計算 DR 量
+    計算 DR 量&價錢
     :param usage_kwh: 用電量
     :param battery_kw: 電池功率
-    :return: DR 量
+    :return: DR 量&價錢
     """
     dr_volume = 0
     if battery_kw < BATTERY_KW:
         remain_kw = BATTERY_KW - battery_kw
-        if remain_kw > (usage_kwh * 4):
-            dr_volume = usage_kwh * 4
+        if remain_kw > usage_kwh:
+            dr_volume = usage_kwh
         else:
             dr_volume = remain_kw
-    if dr_volume >  (battery_kwh * 4):
-        dr_volume = battery_kwh * 4
-    return dr_volume / 1000
+    if dr_volume > battery_kwh:
+        dr_volume = battery_kwh
+    dr_mwh = dr_volume / 1000
+    dr_price = (
+        dr_mwh * DR_AVG_PRICE + dr_mwh * 1000 * DR_REACTION_FREQ * DR_ENERGY_PRICE
+    )
+    return (
+        dr_mwh,
+        dr_price,
+    )
+
+
+def cal_hourly_dr_price(
+    raw_data, meter_usage_cols: MeterUsageColumns, elec_price_cols: ElectricPriceColumns
+):
+    """
+    計算每小時的 DR 量&價格
+    :param raw_data: 原始數據
+    :param meter_usage_cols: 用電欄位名稱
+    :return: 每小時的 DR 量&價格
+    """
+    hourly_data = group_all_data_withour_dr_in_freq(
+        raw_data, "h", meter_usage_cols, elec_price_cols
+    )
+    hourly_data[[meter_usage_cols.dr_volume_col, elec_price_cols.demand_price_col]] = (
+        pd.DataFrame(
+            hourly_data.apply(
+                lambda row: cal_dr_volume_and_price(
+                    row[meter_usage_cols.usage_with_battery_col],
+                    row[meter_usage_cols.battery_kw_col],
+                    row[meter_usage_cols.battery_kwh_col],
+                ),
+                axis=1,
+            ).tolist(),
+        )
+    )
+
+    return hourly_data
 
 
 def cal_elec_price(
@@ -363,19 +426,9 @@ def cal_elec_price(
         else ec_lib.SeasonType.NONSUMMER
     )
     elec_price = price_dict.get(elec_type)
-    dr_mwh = cal_dr_volume(
-        row[meter_usage_cols.usage_with_battery_col],
-        row[meter_usage_cols.battery_kw_col],
-        row[meter_usage_cols.battery_kwh_col],
-    )
-    dr_price = (
-        dr_mwh * DR_AVG_PRICE + dr_mwh * 1000 * DR_REACTION_FREQ * DR_ENERGY_PRICE
-    ) / 4
     return (
         row[meter_usage_cols.usage_col] * elec_price,
         row[meter_usage_cols.usage_with_battery_col] * elec_price,
-        dr_mwh,
-        dr_price,
     )
 
 
