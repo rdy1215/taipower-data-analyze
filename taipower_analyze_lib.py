@@ -22,14 +22,12 @@ BATTERY_DECAY = 0.98
 BATTERY_KWH = 261 * 2 * BATTERY_BUFFER
 BATTERY_KW = 125 * 2 * BATTERY_BUFFER
 
-
 KWH_PRICE = 9000
 DR_AVG_PRICE = 280
 DR_REACTION_FREQ = 1 / 30
 DR_ENERGY_PRICE = 4
 NEW_CONTRACT_BUFFER = 1.1
 CHARGE_LOSS = 0.85
-
 
 MONTH_LIST = [
     "一月",
@@ -105,14 +103,16 @@ def contract_df_to_dict(df):
     return {
         ec_lib.UsageType.PEAK: df["UsuallyContract"].values[0],
         ec_lib.UsageType.SEMI_PEAK: df["NoSummerOrHalfRushContract"].values[0],
-        ec_lib.UsageType.SATURDAY_SEMI_PEAK: df["SaturdayHalfContract"].values[0],
+        ec_lib.UsageType.SATURDAY_SEMI_PEAK:
+        df["SaturdayHalfContract"].values[0],
         ec_lib.UsageType.OFF_PEAK: df["NoRushContract"].values[0],
     }
 
 
 def is_expensive_hour(datetime, elec_params: ElectricParameters):
     result = False
-    usage_type = ec_lib.get_usage_type_from_dict(datetime, elec_params.elec_type_dict)
+    usage_type = ec_lib.get_usage_type_from_dict(datetime,
+                                                 elec_params.elec_type_dict)
     is_summer = ec_lib.is_summer(datetime)
     if elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
         if is_summer and usage_type == ec_lib.UsageType.PEAK:
@@ -132,22 +132,24 @@ def group_all_data_withour_dr_in_freq(
     elec_price_cols: ElectricPriceColumns,
 ):
     # 按日期統計用電總量
-    return (
-        data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq))
-        .agg(
-            {
-                usage_cols.usage_col: "sum",
-                usage_cols.battery_kw_col: "mean",
-                usage_cols.battery_kwh_col: "mean",
-                usage_cols.usage_with_battery_col: "sum",
-                usage_cols.charge_kwh_col: "sum",
-                usage_cols.release_kwh_col: "sum",
-                elec_price_cols.elec_charge_price_col: "sum",
-                elec_price_cols.elec_charge_price_with_battery_col: "sum",
-            }
-        )
-        .reset_index()
-    )
+    return (data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq)).agg({
+        usage_cols.usage_col:
+        "sum",
+        usage_cols.battery_kw_col:
+        "mean",
+        usage_cols.battery_kwh_col:
+        "mean",
+        usage_cols.usage_with_battery_col:
+        "sum",
+        usage_cols.charge_kwh_col:
+        "sum",
+        usage_cols.release_kwh_col:
+        "sum",
+        elec_price_cols.elec_charge_price_col:
+        "sum",
+        elec_price_cols.elec_charge_price_with_battery_col:
+        "sum",
+    }).reset_index())
 
 
 def group_all_data_in_freq(
@@ -157,24 +159,28 @@ def group_all_data_in_freq(
     elec_price_cols: ElectricPriceColumns,
 ):
     # 按日期統計用電總量
-    return (
-        data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq))
-        .agg(
-            {
-                usage_cols.usage_col: "sum",
-                usage_cols.battery_kw_col: "mean",
-                usage_cols.battery_kwh_col: "mean",
-                usage_cols.usage_with_battery_col: "sum",
-                usage_cols.charge_kwh_col: "sum",
-                usage_cols.release_kwh_col: "sum",
-                usage_cols.dr_volume_col: "sum",
-                elec_price_cols.elec_charge_price_col: "sum",
-                elec_price_cols.elec_charge_price_with_battery_col: "sum",
-                elec_price_cols.demand_price_col: "sum",
-            }
-        )
-        .reset_index()
-    )
+    return (data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq)).agg({
+        usage_cols.usage_col:
+        "sum",
+        usage_cols.battery_kw_col:
+        "mean",
+        usage_cols.battery_kwh_col:
+        "mean",
+        usage_cols.usage_with_battery_col:
+        "sum",
+        usage_cols.charge_kwh_col:
+        "sum",
+        usage_cols.release_kwh_col:
+        "sum",
+        usage_cols.dr_volume_col:
+        "sum",
+        elec_price_cols.elec_charge_price_col:
+        "sum",
+        elec_price_cols.elec_charge_price_with_battery_col:
+        "sum",
+        elec_price_cols.demand_price_col:
+        "sum",
+    }).reset_index())
 
 
 def group_max_data_in_freq(
@@ -184,24 +190,28 @@ def group_max_data_in_freq(
     elec_price_cols: ElectricPriceColumns,
 ):
     # 按日期統計用電總量
-    return (
-        data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq))
-        .agg(
-            {
-                usage_cols.usage_col: "max",
-                usage_cols.battery_kw_col: "mean",
-                usage_cols.battery_kwh_col: "max",
-                usage_cols.usage_with_battery_col: "max",
-                usage_cols.charge_kwh_col: "max",
-                usage_cols.release_kwh_col: "max",
-                usage_cols.usage_cols: "max",
-                elec_price_cols.elec_charge_price_col: "max",
-                elec_price_cols.elec_charge_price_with_battery_col: "max",
-                elec_price_cols.demand_price_col: "max",
-            }
-        )
-        .reset_index()
-    )
+    return (data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq)).agg({
+        usage_cols.usage_col:
+        "max",
+        usage_cols.battery_kw_col:
+        "mean",
+        usage_cols.battery_kwh_col:
+        "max",
+        usage_cols.usage_with_battery_col:
+        "max",
+        usage_cols.charge_kwh_col:
+        "max",
+        usage_cols.release_kwh_col:
+        "max",
+        usage_cols.usage_cols:
+        "max",
+        elec_price_cols.elec_charge_price_col:
+        "max",
+        elec_price_cols.elec_charge_price_with_battery_col:
+        "max",
+        elec_price_cols.demand_price_col:
+        "max",
+    }).reset_index())
 
 
 def filter_expensive_usage(
@@ -209,9 +219,8 @@ def filter_expensive_usage(
     usage_cols: MeterUsageColumns,
     elec_params: ElectricParameters,
 ):
-    return data[
-        data[usage_cols.time_col].apply(lambda x: is_expensive_hour(x, elec_params))
-    ]
+    return data[data[usage_cols.time_col].apply(
+        lambda x: is_expensive_hour(x, elec_params))]
 
 
 def filter_expensive_usage_in_freq(
@@ -229,12 +238,12 @@ def filter_expensive_usage_in_freq(
     """
     # 篩選需要的時間段和欄位
     expensive_hour_data = filter_expensive_usage(data, usage_cols, elec_params)
-    return group_all_data_in_freq(
-        expensive_hour_data, freq, usage_cols, elec_price_cols
-    )
+    return group_all_data_in_freq(expensive_hour_data, freq, usage_cols,
+                                  elec_price_cols)
 
 
-def cal_default_charge_kw(date, charge_hour_dict, charge_type: ec_lib.ChargeType):
+def cal_default_charge_kw(date, charge_hour_dict,
+                          charge_type: ec_lib.ChargeType):
     charge_hour_list = []
     if ec_lib.is_summer(date):
         charge_hour_list = charge_hour_dict.get(ec_lib.SeasonType.SUMMER)
@@ -249,9 +258,16 @@ def cal_default_charge_kw(date, charge_hour_dict, charge_type: ec_lib.ChargeType
             if charge_type == ec_lib.ChargeType.MAX:
                 charge_power = BATTERY_KW
             elif charge_type == ec_lib.ChargeType.AVERAGE:
-                charge_power = BATTERY_KWH / (
-                    ((end_time - start_time).seconds + 1) / 3600.0
-                )
+                time_duration = (end_time - start_time).seconds + 1
+                if (i + 2) < len(charge_hour_list):
+                    next_start_time = charge_hour_list[i + 2]
+                    if start_time.time() == (next_start_time -
+                                             pd.Timedelta(seconds=1)).time():
+                        next_end_time = charge_hour_list[i + 3]
+                        time_duration += (next_end_time -
+                                          next_start_time).seconds + 1
+                charge_power = BATTERY_KWH / ((
+                    (end_time - start_time).seconds + 1) / 3600.0)
             break
     return charge_power
 
@@ -271,19 +287,16 @@ def cal_default_release_kw(date, release_hour_dict, release_type):
             if release_type == ec_lib.ReleaseType.MAX:
                 release_power = BATTERY_KW
             elif release_type == ec_lib.ReleaseType.AVERAGE:
-                average_power = BATTERY_KWH / (
-                    ((end_time - start_time).seconds + 1) / 3600.0
-                )
-                release_power = (
-                    average_power if average_power <= BATTERY_KW else BATTERY_KW
-                )
+                average_power = BATTERY_KWH / ((
+                    (end_time - start_time).seconds + 1) / 3600.0)
+                release_power = (average_power if average_power <= BATTERY_KW
+                                 else BATTERY_KW)
             break
     return release_power
 
 
-def cal_actual_release_power(
-    usage, default_release_kw, last_remain_kw, last_battery_kwh
-):
+def cal_actual_release_power(usage, default_release_kw, last_remain_kw,
+                             last_battery_kwh):
     release_kw = 0.0
     usage_kw = usage * 4
     if usage_kw > default_release_kw:
@@ -314,15 +327,15 @@ def process_battery_usage(
 ):
     date_time = row[meter_usage_col.time_col]
     origin_usage = row[meter_usage_col.usage_col]
-    last_remain_kw = (
-        remain_battery_kw_list[-1] if len(remain_battery_kw_list) > 0 else 0.0
-    )
-    last_battery_kwh = battery_kwh_list[-1] if len(battery_kwh_list) > 0 else 0.0
+    last_remain_kw = (remain_battery_kw_list[-1]
+                      if len(remain_battery_kw_list) > 0 else 0.0)
+    last_battery_kwh = battery_kwh_list[-1] if len(
+        battery_kwh_list) > 0 else 0.0
     battery_kw, charge_kw = 0.0, 0.0
     if ec_lib.get_day_type(date_time) == ec_lib.DayType.WORKDAY:
-        charge_kw = cal_default_charge_kw(
-            date_time, elec_parameters.charge_hour_dict, elec_parameters.CHARGE_TYPE
-        )
+        charge_kw = cal_default_charge_kw(date_time,
+                                          elec_parameters.charge_hour_dict,
+                                          elec_parameters.CHARGE_TYPE)
         if charge_kw == 0.0:
             default_release_kw = cal_default_release_kw(
                 date_time,
@@ -330,13 +343,14 @@ def process_battery_usage(
                 elec_parameters.release_type,
             )
             if default_release_kw != 0.0 and last_battery_kwh > 0.0:
-                battery_kw = cal_actual_release_power(
-                    origin_usage, default_release_kw, last_remain_kw, last_battery_kwh
-                )
+                battery_kw = cal_actual_release_power(origin_usage,
+                                                      default_release_kw,
+                                                      last_remain_kw,
+                                                      last_battery_kwh)
                 if battery_kw < (default_release_kw + last_remain_kw):
-                    remain_battery_kw_list.append(
-                        (default_release_kw + last_remain_kw) - battery_kw
-                    )
+                    remain_battery_kw_list.append((default_release_kw +
+                                                   last_remain_kw) -
+                                                  battery_kw)
                 else:
                     remain_battery_kw_list.append(0.0)
             else:
@@ -375,39 +389,36 @@ def cal_dr_volume_and_price(usage_kwh, battery_kw, battery_kwh):
     if dr_volume > battery_kwh:
         dr_volume = battery_kwh
     dr_mwh = dr_volume / 1000
-    dr_price = (
-        dr_mwh * DR_AVG_PRICE + dr_mwh * 1000 * DR_REACTION_FREQ * DR_ENERGY_PRICE
-    )
+    dr_price = (dr_mwh * DR_AVG_PRICE +
+                dr_mwh * 1000 * DR_REACTION_FREQ * DR_ENERGY_PRICE)
     return (
         dr_mwh,
         dr_price,
     )
 
 
-def cal_hourly_dr_price(
-    raw_data, meter_usage_cols: MeterUsageColumns, elec_price_cols: ElectricPriceColumns
-):
+def cal_hourly_dr_price(raw_data, meter_usage_cols: MeterUsageColumns,
+                        elec_price_cols: ElectricPriceColumns):
     """
     計算每小時的 DR 量&價格
     :param raw_data: 原始數據
     :param meter_usage_cols: 用電欄位名稱
     :return: 每小時的 DR 量&價格
     """
-    hourly_data = group_all_data_withour_dr_in_freq(
-        raw_data, "h", meter_usage_cols, elec_price_cols
-    )
-    hourly_data[[meter_usage_cols.dr_volume_col, elec_price_cols.demand_price_col]] = (
-        pd.DataFrame(
-            hourly_data.apply(
-                lambda row: cal_dr_volume_and_price(
-                    row[meter_usage_cols.usage_with_battery_col],
-                    row[meter_usage_cols.battery_kw_col],
-                    row[meter_usage_cols.battery_kwh_col],
-                ),
-                axis=1,
-            ).tolist(),
-        )
-    )
+    hourly_data = group_all_data_withour_dr_in_freq(raw_data, "h",
+                                                    meter_usage_cols,
+                                                    elec_price_cols)
+    hourly_data[[
+        meter_usage_cols.dr_volume_col, elec_price_cols.demand_price_col
+    ]] = (pd.DataFrame(
+        hourly_data.apply(
+            lambda row: cal_dr_volume_and_price(
+                row[meter_usage_cols.usage_with_battery_col],
+                row[meter_usage_cols.battery_kw_col],
+                row[meter_usage_cols.battery_kwh_col],
+            ),
+            axis=1,
+        ).tolist(), ))
 
     return hourly_data
 
@@ -421,10 +432,8 @@ def cal_elec_price(
     datetime = row[meter_usage_cols.time_col]
     elec_type = ec_lib.get_usage_type_from_dict(datetime, elec_type_dict)
     price_dict = charge_price_dict.get(
-        ec_lib.SeasonType.SUMMER
-        if ec_lib.is_summer(datetime)
-        else ec_lib.SeasonType.NONSUMMER
-    )
+        ec_lib.SeasonType.SUMMER if ec_lib.is_summer(datetime) else ec_lib.
+        SeasonType.NONSUMMER)
     elec_price = price_dict.get(elec_type)
     return (
         row[meter_usage_cols.usage_col] * elec_price,
@@ -454,54 +463,44 @@ def cal_new_contract_volume(
         date_time = row[meter_usage_cols.time_col]
         usage_type = ec_lib.get_usage_type_from_dict(date_time, elec_type_dict)
         usage_kw = row[meter_usage_cols.usage_with_battery_col] * 4
-        if (
-            usage_type == ec_lib.UsageType.PEAK
-        ) and usage_kw > max_usually_contract_volume:
+        if (usage_type == ec_lib.UsageType.PEAK
+            ) and usage_kw > max_usually_contract_volume:
             max_usually_contract_volume = usage_kw
-        elif (
-            usage_type == ec_lib.UsageType.SEMI_PEAK
-        ) and usage_kw > max_semi_peak_contract_volume:
+        elif (usage_type == ec_lib.UsageType.SEMI_PEAK
+              ) and usage_kw > max_semi_peak_contract_volume:
             max_semi_peak_contract_volume = usage_kw
-        elif (
-            usage_type == ec_lib.UsageType.SATURDAY_SEMI_PEAK
-            or usage_type == ec_lib.UsageType.OFF_PEAK
-        ) and usage_kw > max_saturday_semi_peak_contract_volume:
+        elif (usage_type == ec_lib.UsageType.SATURDAY_SEMI_PEAK
+              or usage_type == ec_lib.UsageType.OFF_PEAK
+              ) and usage_kw > max_saturday_semi_peak_contract_volume:
             max_saturday_semi_peak_contract_volume = usage_kw
     max_semi_peak_contract_volume -= max_usually_contract_volume
     max_saturday_semi_peak_contract_volume = (
-        max_saturday_semi_peak_contract_volume
-        - max_usually_contract_volume
-        - max_semi_peak_contract_volume
-    )
+        max_saturday_semi_peak_contract_volume - max_usually_contract_volume -
+        max_semi_peak_contract_volume)
     if contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
         return {
-            ec_lib.UsageType.PEAK: max_usually_contract_volume * NEW_CONTRACT_BUFFER,
-            ec_lib.UsageType.SATURDAY_SEMI_PEAK: (
-                (max_semi_peak_contract_volume + max_saturday_semi_peak_contract_volume)
-                * NEW_CONTRACT_BUFFER
-                if (
-                    max_semi_peak_contract_volume
-                    + max_saturday_semi_peak_contract_volume
-                )
-                > 0
-                else 0.0
-            ),
-            ec_lib.UsageType.OFF_PEAK: max_off_peak_contract_volume,
+            ec_lib.UsageType.PEAK:
+            max_usually_contract_volume * NEW_CONTRACT_BUFFER,
+            ec_lib.UsageType.SATURDAY_SEMI_PEAK:
+            ((max_semi_peak_contract_volume +
+              max_saturday_semi_peak_contract_volume) * NEW_CONTRACT_BUFFER if
+             (max_semi_peak_contract_volume +
+              max_saturday_semi_peak_contract_volume) > 0 else 0.0),
+            ec_lib.UsageType.OFF_PEAK:
+            max_off_peak_contract_volume,
         }
     elif contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
         return {
-            ec_lib.UsageType.PEAK: max_usually_contract_volume * NEW_CONTRACT_BUFFER,
-            ec_lib.UsageType.SEMI_PEAK: (
-                max_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
-                if max_semi_peak_contract_volume > 0
-                else 0.0
-            ),
-            ec_lib.UsageType.SATURDAY_SEMI_PEAK: (
-                max_saturday_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
-                if max_saturday_semi_peak_contract_volume > 0
-                else 0.0
-            ),
-            ec_lib.UsageType.OFF_PEAK: max_off_peak_contract_volume,
+            ec_lib.UsageType.PEAK:
+            max_usually_contract_volume * NEW_CONTRACT_BUFFER,
+            ec_lib.UsageType.SEMI_PEAK:
+            (max_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
+             if max_semi_peak_contract_volume > 0 else 0.0),
+            ec_lib.UsageType.SATURDAY_SEMI_PEAK:
+            (max_saturday_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
+             if max_saturday_semi_peak_contract_volume > 0 else 0.0),
+            ec_lib.UsageType.OFF_PEAK:
+            max_off_peak_contract_volume,
         }
 
 
@@ -528,8 +527,7 @@ def cal_monthly_basic_price(
     for i in range(1, 13):
         if i in [5, 10]:
             month_price_dict.update(
-                {MONTH_LIST[i - 1]: (summer_price + non_summer_price) / 2}
-            )
+                {MONTH_LIST[i - 1]: (summer_price + non_summer_price) / 2})
         elif i in [6, 7, 8, 9]:
             month_price_dict.update({MONTH_LIST[i - 1]: summer_price})
         else:
@@ -563,13 +561,12 @@ def cal_year_profit(
         building_cost,
     ]
     charge_profit = (
-        monthly_data[elec_price_cols.elec_charge_price_col]
-        - monthly_data[elec_price_cols.elec_charge_price_with_battery_col]
+        monthly_data[elec_price_cols.elec_charge_price_col] -
+        monthly_data[elec_price_cols.elec_charge_price_with_battery_col]
     ).sum()
-    contract_profit = sum(
-        contract_monthly_basic_price[key] - new_monthly_basic_price[key]
-        for key in contract_monthly_basic_price
-    )
+    contract_profit = sum(contract_monthly_basic_price[key] -
+                          new_monthly_basic_price[key]
+                          for key in contract_monthly_basic_price)
     dr_profit = monthly_data[elec_price_cols.demand_price_col].sum()
     for i in range(1, 21):
         total_profit = charge_profit + contract_profit + dr_profit
@@ -579,14 +576,15 @@ def cal_year_profit(
             contract_profit,
             dr_profit,
             total_profit,
-            result.loc[i - 1][yearly_profit_cols.cumulative_profit_col] + total_profit,
+            result.loc[i - 1][yearly_profit_cols.cumulative_profit_col] +
+            total_profit,
         ]
         charge_profit *= BATTERY_DECAY
         contract_profit *= BATTERY_DECAY
         dr_profit *= BATTERY_DECAY
 
     result[yearly_profit_cols.cumulative_profit_col] = result[
-        yearly_profit_cols.cumulative_profit_col
-    ].apply(lambda x: "{:.0f}".format(x))
+        yearly_profit_cols.cumulative_profit_col].apply(
+            lambda x: "{:.0f}".format(x))
 
     return result
