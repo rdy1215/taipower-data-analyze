@@ -6,12 +6,12 @@ import electricity_lib as ec_lib
 importlib.reload(ec_lib)
 
 # 讀取 Excel 檔案
-METER_NO = "02293584018"
+METER_NO = "21276307021"
 METER_DATA_FILE_PATH = f"meter_{METER_NO}_data.xlsx"
 METER_CONTRACT_FILE_PATH = f"info_{METER_NO}_data.xlsx"
 # 設定合約類型與釋放類型
 RAW_CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
-CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_BATCH
+CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
 
@@ -19,8 +19,9 @@ BATTERY_BUFFER = 0.95
 BATTERY_DECAY = 0.98
 
 # 設定電池容量
-BATTERY_KWH = 261 * 2 * BATTERY_BUFFER
-BATTERY_KW = 125 * 2 * BATTERY_BUFFER
+DEVICE_NUMBER = 5
+BATTERY_KWH = 261 * DEVICE_NUMBER * BATTERY_BUFFER
+BATTERY_KW = 125 * DEVICE_NUMBER * BATTERY_BUFFER
 
 KWH_PRICE = 9000
 DR_AVG_PRICE = 280
@@ -203,7 +204,7 @@ def group_max_data_in_freq(
         "max",
         usage_cols.release_kwh_col:
         "max",
-        usage_cols.usage_cols:
+        usage_cols.dr_volume_col:
         "max",
         elec_price_cols.elec_charge_price_col:
         "max",
@@ -238,8 +239,8 @@ def filter_expensive_usage_in_freq(
     """
     # 篩選需要的時間段和欄位
     expensive_hour_data = filter_expensive_usage(data, usage_cols, elec_params)
-    return group_all_data_in_freq(expensive_hour_data, freq, usage_cols,
-                                  elec_price_cols)
+    return group_all_data_withour_dr_in_freq(expensive_hour_data, freq,
+                                             usage_cols, elec_price_cols)
 
 
 def cal_default_charge_kw(date, charge_hour_dict,
