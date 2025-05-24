@@ -17,6 +17,7 @@ CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
 
 BATTERY_BUFFER = 0.95
 BATTERY_DECAY = 0.98
+BATTERY_DOD = 0.2
 
 # 設定電池容量
 DEVICE_NUMBER = 5
@@ -300,22 +301,23 @@ def cal_actual_release_power(usage, default_release_kw, last_remain_kw,
                              last_battery_kwh):
     release_kw = 0.0
     usage_kw = usage * 4
-    if usage_kw > default_release_kw:
-        sum_kw = default_release_kw + last_remain_kw
-        if sum_kw <= BATTERY_KW:
-            if usage_kw > sum_kw:
-                release_kw = sum_kw
+    if last_battery_kwh > BATTERY_KWH * BATTERY_DOD:
+        if usage_kw > default_release_kw:
+            sum_kw = default_release_kw + last_remain_kw
+            if sum_kw <= BATTERY_KW:
+                if usage_kw > sum_kw:
+                    release_kw = sum_kw
+                else:
+                    release_kw = usage_kw
             else:
-                release_kw = usage_kw
+                if usage_kw > BATTERY_KW:
+                    release_kw = BATTERY_KW
+                else:
+                    release_kw = usage_kw
         else:
-            if usage_kw > BATTERY_KW:
-                release_kw = BATTERY_KW
-            else:
-                release_kw = usage_kw
-    else:
-        release_kw = usage_kw
-    if release_kw / 4 > last_battery_kwh:
-        release_kw = last_battery_kwh * 4
+            release_kw = usage_kw
+        if release_kw / 4 > (last_battery_kwh - BATTERY_KWH * BATTERY_DOD):
+            release_kw = (last_battery_kwh - BATTERY_KWH * BATTERY_DOD) * 4
     return release_kw
 
 
