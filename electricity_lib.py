@@ -53,7 +53,7 @@ def get_release_hour_dict(contract_type: ContractType, release_type: ReleaseType
     if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
         if release_type == ReleaseType.AVERAGE:
             return {
-                SeasonType.SUMMER: ["16:00:00", "21:00:00"],
+                SeasonType.SUMMER: ["16:00:00", "22:00:00"],
                 SeasonType.NONSUMMER: ["06:00:00", "11:00:00", "14:00:00", "23:59:59"],
             }
         elif release_type == ReleaseType.MAX:
@@ -78,24 +78,24 @@ def get_charege_hour_dict(contract_type: ContractType, charge_type: ChargeType):
     if contract_type == ContractType.HIGH_PRESSURE_THREE_PHASE:
         if charge_type == ChargeType.AVERAGE:
             return {
-                SeasonType.SUMMER: ["00:00:00", "09:00:00"],
-                SeasonType.NONSUMMER: ["00:00:00", "06:00:00", "11:00:00", "14:00:00"],
+                SeasonType.SUMMER: ["00:00:00", "08:59:59"],
+                SeasonType.NONSUMMER: ["00:00:00", "05:59:59", "11:00:00", "13:59:59"],
             }
         elif charge_type == ChargeType.MAX:
             return {
-                SeasonType.SUMMER: ["00:00:00", "02:00:00"],
-                SeasonType.NONSUMMER: ["00:00:00", "02:00:00", "11:00:00", "13:00:00"],
+                SeasonType.SUMMER: ["00:00:00", "01:59:59"],
+                SeasonType.NONSUMMER: ["00:00:00", "01:59:59", "11:00:00", "12:59:59"],
             }
     elif contract_type == ContractType.HIGH_PRESSURE_BATCH:
         if charge_type == ChargeType.AVERAGE:
             return {
-                SeasonType.SUMMER: ["00:00:00", "15:30:00", "21:30:00", "23:59:59"],
-                SeasonType.NONSUMMER: ["00:00:00", "15:30:00", "21:30:00", "23:59:59"],
+                SeasonType.SUMMER: ["00:00:00", "15:29:59", "21:30:00", "23:59:59"],
+                SeasonType.NONSUMMER: ["00:00:00", "15:29:59", "21:30:00", "23:59:59"],
             }
         elif charge_type == ChargeType.MAX:
             return {
-                SeasonType.SUMMER: ["21:30:00", "23:30:00"],
-                SeasonType.NONSUMMER: ["21:30:00", "23:30:00"],
+                SeasonType.SUMMER: ["21:30:00", "23:29:59"],
+                SeasonType.NONSUMMER: ["21:30:00", "23:29:59"],
             }
 
 

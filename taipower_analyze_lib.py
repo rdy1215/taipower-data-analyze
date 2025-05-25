@@ -6,21 +6,23 @@ import electricity_lib as ec_lib
 importlib.reload(ec_lib)
 
 # 讀取 Excel 檔案
-METER_NO = "21276307021"
-METER_DATA_FILE_PATH = f"meter_{METER_NO}_data.xlsx"
-METER_CONTRACT_FILE_PATH = f"info_{METER_NO}_data.xlsx"
+METER_NO = "澤米"
+METER_DATA_FILE_PATH = f"./data/meter_{METER_NO}_data.xlsx"
+METER_CONTRACT_FILE_PATH = f"./data/info_{METER_NO}_data.xlsx"
+OUTPUT_FOLDER = "./output/"
+
 # 設定合約類型與釋放類型
 RAW_CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
-CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
+CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_BATCH
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
 
-BATTERY_BUFFER = 0.95
+BATTERY_BUFFER = 0.9
 BATTERY_DECAY = 0.98
 BATTERY_DOD = 0.2
 
 # 設定電池容量
-DEVICE_NUMBER = 5
+DEVICE_NUMBER = 30
 BATTERY_KWH = 261 * DEVICE_NUMBER * BATTERY_BUFFER
 BATTERY_KW = 125 * DEVICE_NUMBER * BATTERY_BUFFER
 
@@ -48,7 +50,7 @@ MONTH_LIST = [
 
 # columns define
 # 預設資訊欄位
-DEFAULT_DROP_COLS = ["儲冷尖峰", "儲冷半尖峰", "儲冷週六半尖峰", "儲冷離峰", "太陽光電"]
+DEFAULT_DROP_COLS = ["經常", "儲冷尖峰", "儲冷半尖峰", "儲冷週六半尖峰", "儲冷離峰", "太陽光電"]
 SUM_COLS = ["尖峰", "半尖峰", "週六半尖峰", "離峰"]
 
 
@@ -101,6 +103,15 @@ class YearlyProfitColumns:
     cumulative_profit_col: str = "累計效益"
 
 
+def build_output_folder():
+    """
+    建立輸出資料夾
+    """
+    import os
+    if not os.path.exists(OUTPUT_FOLDER):
+        os.makedirs(OUTPUT_FOLDER)
+
+
 def contract_df_to_dict(df):
     return {
         ec_lib.UsageType.PEAK: df["UsuallyContract"].values[0],
@@ -109,22 +120,6 @@ def contract_df_to_dict(df):
         df["SaturdayHalfContract"].values[0],
         ec_lib.UsageType.OFF_PEAK: df["NoRushContract"].values[0],
     }
-
-
-def is_expensive_hour(datetime, elec_params: ElectricParameters):
-    result = False
-    usage_type = ec_lib.get_usage_type_from_dict(datetime,
-                                                 elec_params.elec_type_dict)
-    is_summer = ec_lib.is_summer(datetime)
-    if elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
-        if is_summer and usage_type == ec_lib.UsageType.PEAK:
-            result = True
-        elif not is_summer and usage_type == ec_lib.UsageType.SEMI_PEAK:
-            result = True
-    elif elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
-        if usage_type == ec_lib.UsageType.PEAK:
-            result = True
-    return result
 
 
 def group_all_data_withour_dr_in_freq(
@@ -196,7 +191,7 @@ def group_max_data_in_freq(
         usage_cols.usage_col:
         "max",
         usage_cols.battery_kw_col:
-        "mean",
+        "max",
         usage_cols.battery_kwh_col:
         "max",
         usage_cols.usage_with_battery_col:
@@ -214,6 +209,49 @@ def group_max_data_in_freq(
         elec_price_cols.demand_price_col:
         "max",
     }).reset_index())
+
+
+def group_max_data_without_dr_in_freq(
+    data,
+    freq,
+    usage_cols: MeterUsageColumns,
+    elec_price_cols: ElectricPriceColumns,
+):
+    # 按日期統計用電總量
+    return (data.groupby(pd.Grouper(key=usage_cols.time_col, freq=freq)).agg({
+        usage_cols.usage_col:
+        "max",
+        usage_cols.battery_kw_col:
+        "max",
+        usage_cols.battery_kwh_col:
+        "max",
+        usage_cols.usage_with_battery_col:
+        "max",
+        usage_cols.charge_kwh_col:
+        "max",
+        usage_cols.release_kwh_col:
+        "max",
+        elec_price_cols.elec_charge_price_col:
+        "max",
+        elec_price_cols.elec_charge_price_with_battery_col:
+        "max",
+    }).reset_index())
+
+
+def is_expensive_hour(datetime, elec_params: ElectricParameters):
+    result = False
+    usage_type = ec_lib.get_usage_type_from_dict(datetime,
+                                                 elec_params.elec_type_dict)
+    is_summer = ec_lib.is_summer(datetime)
+    if elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
+        if is_summer and usage_type == ec_lib.UsageType.PEAK:
+            result = True
+        elif not is_summer and usage_type == ec_lib.UsageType.SEMI_PEAK:
+            result = True
+    elif elec_params.contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
+        if usage_type == ec_lib.UsageType.PEAK:
+            result = True
+    return result
 
 
 def filter_expensive_usage(
@@ -261,15 +299,15 @@ def cal_default_charge_kw(date, charge_hour_dict,
                 charge_power = BATTERY_KW
             elif charge_type == ec_lib.ChargeType.AVERAGE:
                 time_duration = (end_time - start_time).seconds + 1
-                if (i + 2) < len(charge_hour_list):
-                    next_start_time = charge_hour_list[i + 2]
-                    if start_time.time() == (next_start_time -
-                                             pd.Timedelta(seconds=1)).time():
-                        next_end_time = charge_hour_list[i + 3]
+                if i > 1:
+                    next_start_time = charge_hour_list[0]
+                    if end_time.time() == (next_start_time -
+                                           pd.Timedelta(seconds=1)).time():
+                        next_end_time = charge_hour_list[1]
                         time_duration += (next_end_time -
                                           next_start_time).seconds + 1
-                charge_power = BATTERY_KWH / ((
-                    (end_time - start_time).seconds + 1) / 3600.0)
+                charge_power = (BATTERY_KWH *
+                                (1 - BATTERY_DOD)) / (time_duration / 3600.0)
             break
     return charge_power
 
@@ -289,7 +327,7 @@ def cal_default_release_kw(date, release_hour_dict, release_type):
             if release_type == ec_lib.ReleaseType.MAX:
                 release_power = BATTERY_KW
             elif release_type == ec_lib.ReleaseType.AVERAGE:
-                average_power = BATTERY_KWH / ((
+                average_power = BATTERY_KWH * (1 - BATTERY_DOD) / ((
                     (end_time - start_time).seconds + 1) / 3600.0)
                 release_power = (average_power if average_power <= BATTERY_KW
                                  else BATTERY_KW)
@@ -363,15 +401,15 @@ def process_battery_usage(
                 battery_kw = -charge_kw
             else:
                 battery_kw = -(BATTERY_KWH - last_battery_kwh) * 4
+            remain_battery_kw_list.append(0.0)
     battery_kwh = battery_kw / 4
-    usage_kwh = battery_kwh if battery_kwh > 0 else battery_kwh / CHARGE_LOSS
     battery_kwh_list.append(last_battery_kwh - battery_kwh)
     return (
         battery_kw,
         last_battery_kwh - battery_kwh,
-        origin_usage - usage_kwh,
-        usage_kwh if usage_kwh < 0 else 0.0,
-        usage_kwh if usage_kwh > 0 else 0.0,
+        origin_usage - battery_kwh,
+        battery_kwh / CHARGE_LOSS if battery_kwh < 0 else 0.0,
+        battery_kwh if battery_kwh > 0 else 0.0,
     )
 
 
