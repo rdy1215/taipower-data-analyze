@@ -6,14 +6,14 @@ import electricity_lib as ec_lib
 importlib.reload(ec_lib)
 
 # 讀取 Excel 檔案
-METER_NO = "澤米"
+METER_NO = "21276307021"
 METER_DATA_FILE_PATH = f"./data/meter_{METER_NO}_data.xlsx"
 METER_CONTRACT_FILE_PATH = f"./data/info_{METER_NO}_data.xlsx"
 OUTPUT_FOLDER = "./output/"
 
 # 設定合約類型與釋放類型
 RAW_CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
-CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_BATCH
+CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
 
@@ -22,7 +22,7 @@ BATTERY_DECAY = 0.98
 BATTERY_DOD = 0.2
 
 # 設定電池容量
-DEVICE_NUMBER = 30
+DEVICE_NUMBER = 10
 BATTERY_KWH = 261 * DEVICE_NUMBER * BATTERY_BUFFER
 BATTERY_KW = 125 * DEVICE_NUMBER * BATTERY_BUFFER
 
@@ -629,3 +629,33 @@ def cal_year_profit(
             lambda x: "{:.0f}".format(x))
 
     return result
+
+
+def sum_profit(row, elec_price_cols: ElectricPriceColumns):
+    """
+    計算每行利潤
+    :param row: 數據行
+    :param elec_price_cols: 電價欄位名稱
+    :return: 利潤
+    """
+    return row[elec_price_cols.elec_charge_price_col] - row[
+        elec_price_cols.elec_charge_price_with_battery_col] + row[
+            elec_price_cols.demand_price_col]
+
+
+def find_most_profit_day(daily_data, meter_usage_cols: MeterUsageColumns,
+                         elec_price_cols: ElectricPriceColumns):
+    summer_profit_date, non_summer_profit_date = None, None
+    summer_profit, non_summer_profit = 0.0, 0.0
+    for index, row in daily_data.iterrows():
+        date = row[meter_usage_cols.time_col]
+        row_profit = sum_profit(row, elec_price_cols)
+        if ec_lib.is_summer(date):
+            if summer_profit_date is None or row_profit > summer_profit:
+                summer_profit_date = date
+                summer_profit = row_profit
+        else:
+            if non_summer_profit_date is None or row_profit > non_summer_profit:
+                non_summer_profit_date = date
+                non_summer_profit = row_profit
+    return (summer_profit_date, non_summer_profit_date)
