@@ -6,7 +6,7 @@ import electricity_lib as ec_lib
 importlib.reload(ec_lib)
 
 # 讀取 Excel 檔案
-METER_NO = "21276307021"
+METER_NO = "澤米"
 METER_DATA_FILE_PATH = f"./data/meter_{METER_NO}_data.xlsx"
 METER_CONTRACT_FILE_PATH = f"./data/info_{METER_NO}_data.xlsx"
 OUTPUT_FOLDER = "./output/"
@@ -22,13 +22,13 @@ BATTERY_DECAY = 0.98
 BATTERY_DOD = 0.2
 
 # 設定電池容量
-DEVICE_NUMBER = 10
+DEVICE_NUMBER = 15
 BATTERY_KWH = 261 * DEVICE_NUMBER * BATTERY_BUFFER
 BATTERY_KW = 125 * DEVICE_NUMBER * BATTERY_BUFFER
 
 KWH_PRICE = 9000
 DR_AVG_PRICE = 280
-DR_REACTION_FREQ = 1 / 30
+DR_REACTION_FREQ = 1 / 24 / 30
 DR_ENERGY_PRICE = 4
 NEW_CONTRACT_BUFFER = 1.1
 CHARGE_LOSS = 0.85
@@ -88,7 +88,8 @@ class ElectricParameters:
 
 @dataclass
 class ElecetricPriceParameters:
-    charge_price_dict: dict
+    raw_charge_price_dict: dict
+    new_charge_price_dict: dict
     raw_contract_price_dict: dict
     contract_price_dict: dict
 
@@ -467,18 +468,26 @@ def cal_hourly_dr_price(raw_data, meter_usage_cols: MeterUsageColumns,
 def cal_elec_price(
     row,
     meter_usage_cols: MeterUsageColumns,
-    elec_type_dict: dict,
-    charge_price_dict: dict,
+    elec_params: ElectricParameters,
+    elec_price_params: ElecetricPriceParameters,
 ):
     datetime = row[meter_usage_cols.time_col]
-    elec_type = ec_lib.get_usage_type_from_dict(datetime, elec_type_dict)
-    price_dict = charge_price_dict.get(
+    raw_contract_elec_type = ec_lib.get_usage_type_from_dict(
+        datetime, elec_params.raw_elec_type_dict)
+    new_contract_elec_type = ec_lib.get_usage_type_from_dict(
+        datetime, elec_params.elec_type_dict)
+    raw_price_dict = elec_price_params.raw_charge_price_dict.get(
         ec_lib.SeasonType.SUMMER if ec_lib.is_summer(datetime) else ec_lib.
         SeasonType.NONSUMMER)
-    elec_price = price_dict.get(elec_type)
+    new_price_dict = elec_price_params.new_charge_price_dict.get(
+        ec_lib.SeasonType.SUMMER if ec_lib.is_summer(datetime) else ec_lib.
+        SeasonType.NONSUMMER)
+    raw_elec_price = raw_price_dict.get(raw_contract_elec_type)
+    new_elec_price = new_price_dict.get(new_contract_elec_type)
     return (
-        row[meter_usage_cols.usage_col] * elec_price,
-        row[meter_usage_cols.usage_with_battery_col] * elec_price,
+        row[meter_usage_cols.usage_col] * raw_elec_price,
+        (row[meter_usage_cols.usage_col] - row[meter_usage_cols.charge_kwh_col]
+         - row[meter_usage_cols.release_kwh_col]) * new_elec_price,
     )
 
 
