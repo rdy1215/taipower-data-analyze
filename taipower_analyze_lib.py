@@ -5,17 +5,17 @@ import electricity_lib as ec_lib
 
 importlib.reload(ec_lib)
 
-# 讀取 Excel 檔案
-METER_NO = "澤米"
-METER_DATA_FILE_PATH = f"./data/meter_{METER_NO}_data.xlsx"
-METER_CONTRACT_FILE_PATH = f"./data/info_{METER_NO}_data.xlsx"
-OUTPUT_FOLDER = "./output/"
-
 # 設定合約類型與釋放類型
 RAW_CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
+
+# 讀取 Excel 檔案
+METER_NO = "澤米"
+METER_DATA_FILE_PATH = f"./data/meter_{METER_NO}_data.xlsx"
+METER_CONTRACT_FILE_PATH = f"./data/info_{METER_NO}_data.xlsx"
+OUTPUT_FOLDER = f"./output/{METER_NO}/{CONTRACT_TYPE.value}/"
 
 BATTERY_BUFFER = 0.9
 BATTERY_DECAY = 0.98
