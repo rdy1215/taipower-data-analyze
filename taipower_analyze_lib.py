@@ -7,12 +7,12 @@ importlib.reload(ec_lib)
 
 # 設定合約類型與釋放類型
 RAW_CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
-CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE
+CONTRACT_TYPE = ec_lib.ContractType.HIGH_PRESSURE_BATCH
 RELEASE_TYPE = ec_lib.ReleaseType.AVERAGE
 CHARGE_TYPE = ec_lib.ChargeType.AVERAGE
 
 # 讀取 Excel 檔案
-METER_NO = "澤米"
+METER_NO = "12590269770"
 METER_DATA_FILE_PATH = f"./data/meter_{METER_NO}_data.xlsx"
 METER_CONTRACT_FILE_PATH = f"./data/info_{METER_NO}_data.xlsx"
 
@@ -21,7 +21,7 @@ BATTERY_DECAY = 0.98
 BATTERY_DOD = 0.2
 
 # 設定電池容量
-DEVICE_NUMBER = 14
+DEVICE_NUMBER = 8
 BATTERY_KWH = 261 * DEVICE_NUMBER * BATTERY_BUFFER
 BATTERY_KW = 125 * DEVICE_NUMBER * BATTERY_BUFFER
 
@@ -266,6 +266,15 @@ def filter_expensive_usage(
         lambda x: is_expensive_hour(x, elec_params))]
 
 
+def filter_nonexpensive_usage(
+    data,
+    usage_cols: MeterUsageColumns,
+    elec_params: ElectricParameters,
+):
+    return data[data[usage_cols.time_col].apply(
+        lambda x: not is_expensive_hour(x, elec_params))]
+
+
 def filter_expensive_usage_in_freq(
     data,
     freq,
@@ -493,15 +502,31 @@ def cal_elec_price(
     )
 
 
-def cal_new_contract_volume(
-    raw_data,
-    meter_usage_cols: MeterUsageColumns,
-    elec_type_dict: dict,
-    contract_type: ec_lib.ContractType,
-):
+def filter_season_data(raw_data, meter_usage_cols: MeterUsageColumns,
+                       season_type: ec_lib.SeasonType):
+    """
+    篩選出夏季或非夏季的數據
+    :param raw_data: 原始數據
+    :param meter_usage_cols: 用電欄位名稱
+    :param season_type: 季節
+    :return: 篩選後的數據
+    """
+    if season_type == ec_lib.SeasonType.SUMMER:
+        return raw_data[raw_data[meter_usage_cols.time_col].apply(
+            lambda x: ec_lib.is_summer(x))]
+    else:
+        return raw_data[raw_data[meter_usage_cols.time_col].apply(
+            lambda x: not ec_lib.is_summer(x))]
+
+
+def cal_new_contract_volume(expensive_15_usage, nonexpensive_15_usage,
+                            meter_usage_cols: MeterUsageColumns,
+                            contract_type: ec_lib.ContractType,
+                            raw_contract: dict):
     """
     計算新合約的用電量
-    :param raw_data: 原始數據
+    :param expensive_15_usage: 尖峰用電
+    :param nonexpensive_15_usage: 非尖峰用電
     :param meter_usage_cols: 用電欄位名稱
     :return: 新合約的用電量
     """
@@ -511,28 +536,37 @@ def cal_new_contract_volume(
         max_saturday_semi_peak_contract_volume,
         max_off_peak_contract_volume,
     ) = (0.0, 0.0, 0.0, 0.0)
-    for index, row in raw_data.iterrows():
-        date_time = row[meter_usage_cols.time_col]
-        usage_type = ec_lib.get_usage_type_from_dict(date_time, elec_type_dict)
-        usage_kw = row[meter_usage_cols.usage_with_battery_col] * 4
-        if (usage_type == ec_lib.UsageType.PEAK
-            ) and usage_kw > max_usually_contract_volume:
-            max_usually_contract_volume = usage_kw
-        elif (usage_type == ec_lib.UsageType.SEMI_PEAK
-              ) and usage_kw > max_semi_peak_contract_volume:
-            max_semi_peak_contract_volume = usage_kw
-        elif (usage_type == ec_lib.UsageType.SATURDAY_SEMI_PEAK
-              or usage_type == ec_lib.UsageType.OFF_PEAK
-              ) and usage_kw > max_saturday_semi_peak_contract_volume:
-            max_saturday_semi_peak_contract_volume = usage_kw
-    max_semi_peak_contract_volume -= max_usually_contract_volume
+    max_peak, max_semi_peak = 0.0, 0.0
+    if contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
+        summer_expensive_15 = filter_season_data(expensive_15_usage,
+                                                 meter_usage_cols,
+                                                 ec_lib.SeasonType.SUMMER)
+        nonsummer_expensive_15 = filter_season_data(
+            expensive_15_usage, meter_usage_cols, ec_lib.SeasonType.NONSUMMER)
+        max_peak = summer_expensive_15[
+            meter_usage_cols.usage_with_battery_col].max()
+        max_semi_peak = nonsummer_expensive_15[
+            meter_usage_cols.usage_with_battery_col].max()
+    elif contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
+        max_peak = expensive_15_usage[
+            meter_usage_cols.usage_with_battery_col].max()
+    max_saturday_semi_peak_contract_volume = nonexpensive_15_usage[
+        meter_usage_cols.usage_with_battery_col].max() * 4
+    
+    max_usually_contract_volume = max_peak * 4
+    max_semi_peak_contract_volume = max_semi_peak * 4 - max_usually_contract_volume
     max_saturday_semi_peak_contract_volume = (
         max_saturday_semi_peak_contract_volume - max_usually_contract_volume -
         max_semi_peak_contract_volume)
+    raw_usually_contract_volume = raw_contract.get(ec_lib.UsageType.PEAK, 0)
+
     if contract_type == ec_lib.ContractType.HIGH_PRESSURE_BATCH:
         return {
             ec_lib.UsageType.PEAK:
-            max_usually_contract_volume * NEW_CONTRACT_BUFFER,
+            max_usually_contract_volume *
+            NEW_CONTRACT_BUFFER if max_usually_contract_volume *
+            NEW_CONTRACT_BUFFER < raw_usually_contract_volume else
+            raw_usually_contract_volume,
             ec_lib.UsageType.SATURDAY_SEMI_PEAK:
             ((max_semi_peak_contract_volume +
               max_saturday_semi_peak_contract_volume) * NEW_CONTRACT_BUFFER if
@@ -544,7 +578,10 @@ def cal_new_contract_volume(
     elif contract_type == ec_lib.ContractType.HIGH_PRESSURE_THREE_PHASE:
         return {
             ec_lib.UsageType.PEAK:
-            max_usually_contract_volume * NEW_CONTRACT_BUFFER,
+            max_usually_contract_volume *
+            NEW_CONTRACT_BUFFER if max_usually_contract_volume *
+            NEW_CONTRACT_BUFFER < raw_usually_contract_volume else
+            raw_usually_contract_volume,
             ec_lib.UsageType.SEMI_PEAK:
             (max_semi_peak_contract_volume * NEW_CONTRACT_BUFFER
              if max_semi_peak_contract_volume > 0 else 0.0),
@@ -558,8 +595,16 @@ def cal_new_contract_volume(
 
 def cal_basic_price(contract_volume: dict, price_dict: dict):
     total_price = 0
+    peak_volume = contract_volume.get(ec_lib.UsageType.PEAK,
+                                      0) + contract_volume.get(
+                                          ec_lib.UsageType.SEMI_PEAK, 0)
     for i in contract_volume.keys():
-        total_price += contract_volume.get(i) * price_dict.get(i)
+        if i == ec_lib.UsageType.SATURDAY_SEMI_PEAK or i == ec_lib.UsageType.OFF_PEAK:
+            cal_price = (contract_volume.get(i) -
+                         peak_volume * 0.5) * price_dict.get(i)
+            total_price += cal_price if cal_price > 0 else 0
+        else:
+            total_price += contract_volume.get(i) * price_dict.get(i)
     return total_price
 
 
@@ -632,7 +677,7 @@ def cal_year_profit(
             total_profit,
         ]
         charge_profit *= BATTERY_DECAY
-        contract_profit *= BATTERY_DECAY
+        contract_profit
         dr_profit *= BATTERY_DECAY
 
     result[yearly_profit_cols.cumulative_profit_col] = result[
